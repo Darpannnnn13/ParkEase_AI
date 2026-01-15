@@ -1,0 +1,326 @@
+{% extends "base.html" %}
+
+{% block title %}My Dashboard - ParkEase{% endblock %}
+
+{% block content %}
+<div class="animate-slide-up">
+    <h1 class="text-3xl font-bold text-white mb-8 drop-shadow-md">User Dashboard</h1>
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+
+        <!-- Left Column: Profile and Car -->
+        <div class="lg:col-span-1 space-y-8">
+            <!-- Profile Card -->
+            <div class="glass p-6 rounded-2xl shadow-xl relative overflow-hidden group">
+                <div class="absolute top-0 right-0 -mt-4 -mr-4 w-24 h-24 bg-gradient-to-br from-primary to-purple-600 rounded-full opacity-20 group-hover:scale-150 transition-transform duration-500"></div>
+                <h2 class="text-xl font-bold mb-6 flex items-center text-gray-800"><i class="fas fa-id-card mr-3 text-primary"></i>My Profile</h2>
+                <div class="space-y-4">
+                    <div class="flex items-center p-3 bg-white/50 rounded-lg">
+                        <div class="w-10 h-10 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600 mr-3"><i class="fas fa-user"></i></div>
+                        <div><p class="text-xs text-gray-500 uppercase">Name</p><p class="font-semibold text-gray-800">{{ current_user.full_name }}</p></div>
+                    </div>
+                    <div class="flex items-center p-3 bg-white/50 rounded-lg">
+                        <div class="w-10 h-10 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600 mr-3"><i class="fas fa-envelope"></i></div>
+                        <div><p class="text-xs text-gray-500 uppercase">Email</p><p class="font-semibold text-gray-800">{{ current_user.email }}</p></div>
+                    </div>
+                    <div class="flex items-center p-3 bg-white/50 rounded-lg">
+                        <div class="w-10 h-10 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600 mr-3"><i class="fas fa-car"></i></div>
+                        <div><p class="text-xs text-gray-500 uppercase">Vehicle</p><p class="font-semibold text-gray-800">{{ current_user.vehicle_number }}</p></div>
+                    </div>
+                </div>
+                <a href="{{ url_for('profile') }}" class="block w-full text-center mt-6 bg-white border border-gray-200 text-gray-700 font-bold py-2 px-4 rounded-xl hover:bg-gray-50 hover:text-primary transition-colors shadow-sm">
+                    Edit Profile
+                </a>
+            </div>
+
+            <!-- Find My Vehicle Card -->
+            <div id="find-my-vehicle" class="glass p-6 rounded-2xl shadow-xl border-l-4 border-secondary">
+                <h2 class="text-xl font-bold mb-4 flex items-center text-gray-800">
+                    {% if current_user.vehicle_type == 'Bike' %}
+                    <i class="fas fa-motorcycle mr-3 text-secondary"></i>Find My Bike
+                    {% else %}
+                    <i class="fas fa-car mr-3 text-secondary"></i>Find My Car
+                    {% endif %}
+                </h2>
+                {% if last_active_booking %}
+                <div class="space-y-2 mb-6">
+                    <p class="text-gray-500 text-sm">Your last parked location:</p>
+                    <p class="font-bold text-2xl text-gray-800">{{ last_active_booking.area_name }}, {{ last_active_booking.slot_ids|join(', ') }}</p>
+                    
+                    <!-- Live Timer -->
+                    <div class="bg-gray-100 rounded-lg p-3 mt-2 flex items-center justify-between">
+                        <span class="text-xs font-bold text-gray-500 uppercase">Time Remaining</span>
+                        <span id="parking-timer" class="font-mono font-bold text-lg text-primary" data-end="{{ last_active_booking.end_time }}">Calculating...</span>
+                    </div>
+
+                    <div class="mt-4 p-3 bg-red-50 border border-red-200 rounded-xl text-center">
+                        <p class="text-xs text-red-600 font-bold uppercase tracking-wider mb-1">Exit Token (Show to Guard)</p>
+                        <p class="text-3xl font-mono font-bold text-red-700 tracking-widest">{{ last_active_booking.exit_token }}</p>
+                    </div>
+                </div>
+                <a href="https://www.google.com/maps/dir/?api=1&destination={{ last_active_booking.coordinates[1] }},{{ last_active_booking.coordinates[0] }}" target="_blank" class="w-full bg-gradient-to-r from-secondary to-teal-500 text-white font-bold py-3 px-4 rounded-xl hover:shadow-lg hover:shadow-teal-500/40 transition-all transform hover:-translate-y-0.5 flex items-center justify-center">
+                    <i class="fas fa-location-arrow mr-2"></i>Navigate to Vehicle
+                </a>
+                {% else %}
+                <div class="space-y-2 mb-6">
+                    <p class="text-gray-500 text-sm">No active parking session found.</p>
+                </div>
+                <button class="w-full bg-gradient-to-r from-secondary to-teal-500 text-white font-bold py-3 px-4 rounded-xl transition-all opacity-50 cursor-not-allowed" disabled>
+                    <i class="fas fa-location-arrow mr-2"></i>Navigate to Vehicle
+                </button>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Right Column: Booking History -->
+        <div class="lg:col-span-2 glass p-8 rounded-2xl shadow-xl">
+            <h2 class="text-2xl font-bold mb-6 text-gray-800 flex items-center"><i class="fas fa-history mr-3 text-primary"></i>My Bookings</h2>
+            <div class="overflow-hidden rounded-xl border border-gray-200 shadow-sm">
+                <table class="min-w-full text-sm text-left text-gray-500">
+                    <thead class="text-xs text-gray-700 uppercase bg-gray-100/80 backdrop-blur">
+                    <tr>
+                        <th scope="col" class="px-6 py-3">Time Window</th>
+                        <th scope="col" class="px-6 py-3">Token</th>
+                        <th scope="col" class="px-6 py-3">Location</th>
+                        <th scope="col" class="px-6 py-3">Slot</th>
+                        <th scope="col" class="px-6 py-3">Status</th>
+                        <th scope="col" class="px-6 py-3">Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for booking in bookings %}
+                    <tr class="bg-white/60 border-b hover:bg-white hover:shadow-sm transition-all duration-200 transform hover:scale-[1.01]">
+                        <th scope="row" class="px-6 py-4 font-medium text-gray-900">
+                            {{ booking.start_time.strftime('%b %d, %H:%M') }} - 
+                            {{ booking.end_time.strftime('%H:%M') }}
+                        </th>
+                        <td class="px-6 py-4">
+                            {% if booking.status == 'Active' %}
+                                <div class="flex flex-col">
+                                    <span class="text-[10px] text-gray-500 uppercase font-bold">Exit Token</span>
+                                    <span class="font-mono font-bold text-red-600 bg-red-50 px-2 py-1 rounded border border-red-200">{{ booking.exit_token }}</span>
+                                </div>
+                            {% else %}
+                                <div class="flex flex-col">
+                                    <span class="text-[10px] text-gray-500 uppercase font-bold">Entry Token</span>
+                                    <span class="font-mono font-bold text-gray-800 bg-gray-100 px-2 py-1 rounded border border-gray-300">{{ booking.booking_token }}</span>
+                                </div>
+                            {% endif %}
+                        </td>
+                        <td class="px-6 py-4">{{ booking.area_name }}</td>
+                        <td class="px-6 py-4">{{ booking.slot_ids|join(', ') }}</td>
+                        <td class="px-6 py-4">
+                            <span class="{% if booking.status == 'Active' %}bg-green-100 text-green-800 border border-green-200{% elif booking.status == 'Confirmed' %}bg-blue-100 text-blue-800 border border-blue-200{% elif booking.status == 'Pending Payment' %}bg-yellow-100 text-yellow-800 border border-yellow-200{% else %}bg-gray-100 text-gray-800 border border-gray-200{% endif %} text-xs font-bold px-3 py-1 rounded-full">{{ booking.status }}</span>
+                        </td>
+                        <td class="px-6 py-4">
+                            <div class="flex items-center space-x-2">
+                                {% if booking.status == 'Pending Payment' %}
+                                <form action="{{ url_for('pay_booking', booking_id=booking._id) }}" method="POST">
+                                    <button type="submit" class="text-xs bg-primary text-white px-3 py-1 rounded hover:bg-indigo-700 transition">Pay ${{ "%.2f"|format(booking.amount) }}</button>
+                                </form>
+                                {% elif booking.status == 'Active' %}
+                                <form action="{{ url_for('extend_booking', booking_id=booking._id) }}" method="POST" class="flex items-center space-x-1">
+                                    <select name="hours" class="text-xs border border-gray-300 rounded px-1 py-0.5 bg-white focus:outline-none focus:ring-1 focus:ring-primary">
+                                        <option value="1">+1h</option>
+                                        <option value="2">+2h</option>
+                                        <option value="3">+3h</option>
+                                    </select>
+                                    <button type="submit" class="text-xs bg-secondary text-white px-2 py-1 rounded hover:bg-teal-600 transition">Ext</button>
+                                </form>
+                                {% endif %}
+
+                                {% if booking.status in ['Confirmed', 'Pending Payment'] %}
+                                <form action="{{ url_for('cancel_booking', booking_id=booking._id) }}" method="POST" onsubmit="return confirm('Are you sure you want to cancel? A 10% fee may apply if already paid.');">
+                                    <button type="submit" class="text-xs bg-red-500 text-white px-3 py-1 rounded hover:bg-red-600 transition">Cancel</button>
+                                </form>
+                                {% else %}
+                                <button type="button" onclick="openDetailsModal(this)" 
+                                    data-area="{{ booking.area_name }}"
+                                    data-slots="{{ booking.slot_ids|join(', ') }}"
+                                    data-status="{{ booking.status }}"
+                                    data-amount="{{ booking.amount }}"
+                                    data-booked-start="{{ booking.start_time }}"
+                                    data-booked-end="{{ booking.end_time }}"
+                                    data-checkin="{{ booking.check_in_time }}"
+                                    data-checkout="{{ booking.check_out_time }}"
+                                    data-booked-duration="{{ booking.duration }}"
+                                    class="text-xs text-primary hover:text-indigo-700 font-medium transition-colors">
+                                    View Details
+                                </button>
+                                {% endif %}
+                                
+                                {% if booking.status in ['Confirmed', 'Active'] %}
+                                <a href="https://www.google.com/maps/dir/?api=1&destination={{ booking.coordinates[1] }},{{ booking.coordinates[0] }}" target="_blank" title="Navigate to Parking" class="text-xs bg-blue-500 text-white px-2 py-1 rounded hover:bg-blue-600 transition">
+                                    <i class="fas fa-location-arrow"></i>
+                                </a>
+                                {% endif %}
+                            </div>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="5" class="px-6 py-4 text-center text-gray-500">No bookings found.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Booking Details Modal -->
+    <div id="details-modal" class="fixed inset-0 z-50 hidden overflow-y-auto" aria-labelledby="modal-title" role="dialog" aria-modal="true">
+        <div class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
+            <div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" aria-hidden="true" onclick="closeDetailsModal()"></div>
+            <span class="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
+            <div class="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
+                <div class="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
+                    <div class="sm:flex sm:items-start">
+                        <div class="mt-3 text-center sm:mt-0 sm:ml-4 sm:text-left w-full">
+                            <h3 class="text-lg leading-6 font-bold text-gray-900 mb-4" id="modal-title">Booking Details</h3>
+                            
+                            <div class="space-y-3 text-sm">
+                                <div class="flex justify-between border-b pb-2">
+                                    <span class="text-gray-500">Location:</span>
+                                    <span class="font-medium text-gray-900" id="modal-area"></span>
+                                </div>
+                                <div class="flex justify-between border-b pb-2">
+                                    <span class="text-gray-500">Slot(s):</span>
+                                    <span class="font-medium text-gray-900" id="modal-slots"></span>
+                                </div>
+                                <div class="flex justify-between border-b pb-2">
+                                    <span class="text-gray-500">Status:</span>
+                                    <span class="font-medium" id="modal-status"></span>
+                                </div>
+                                <div class="grid grid-cols-2 gap-4 bg-gray-50 p-3 rounded-lg">
+                                    <div>
+                                        <p class="text-xs text-gray-500 uppercase">Entry Time</p>
+                                        <p class="font-mono font-bold text-gray-800" id="modal-entry">--:--</p>
+                                    </div>
+                                    <div>
+                                        <p class="text-xs text-gray-500 uppercase">Exit Time</p>
+                                        <p class="font-mono font-bold text-gray-800" id="modal-exit">--:--</p>
+                                    </div>
+                                </div>
+                                <div class="flex justify-between items-center pt-2">
+                                    <span class="text-gray-500">Total Time Taken:</span>
+                                    <span class="font-bold text-gray-900 text-lg" id="modal-duration">--</span>
+                                </div>
+                                
+                                <!-- Coupon Section -->
+                                <div id="modal-coupon" class="hidden mt-4 p-4 bg-gradient-to-r from-yellow-100 to-yellow-50 border border-yellow-200 rounded-xl text-center relative overflow-hidden">
+                                    <div class="absolute top-0 right-0 -mt-2 -mr-2 w-12 h-12 bg-yellow-300 rounded-full opacity-50"></div>
+                                    <p class="text-yellow-800 font-bold text-sm mb-1"><i class="fas fa-gift mr-1"></i>Early Bird Discount!</p>
+                                    <p class="text-xs text-yellow-700 mb-2">You used less time than booked.</p>
+                                    <div class="inline-block bg-white border-2 border-dashed border-yellow-400 px-4 py-1 rounded font-mono font-bold text-yellow-600 text-lg" id="coupon-code">SAVE20</div>
+                                    <p class="text-[10px] text-yellow-600 mt-1" id="coupon-desc">20% OFF your next booking</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="bg-gray-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
+                    <button type="button" class="w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm" onclick="closeDetailsModal()">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    function openDetailsModal(btn) {
+        const area = btn.getAttribute('data-area');
+        const slots = btn.getAttribute('data-slots');
+        const status = btn.getAttribute('data-status');
+        const checkin = btn.getAttribute('data-checkin');
+        const checkout = btn.getAttribute('data-checkout');
+        const bookedStart = btn.getAttribute('data-booked-start');
+        const bookedEnd = btn.getAttribute('data-booked-end');
+        const bookedDurationHours = parseFloat(btn.getAttribute('data-booked-duration'));
+
+        document.getElementById('modal-area').innerText = area;
+        document.getElementById('modal-slots').innerText = slots;
+        document.getElementById('modal-status').innerText = status;
+        
+        const formatTime = (dateStr) => {
+            if (!dateStr || dateStr === 'None') return '--:--';
+            const date = new Date(dateStr);
+            return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        };
+
+        const entryTime = (checkin && checkin !== 'None') ? checkin : bookedStart;
+        const exitTime = (checkout && checkout !== 'None') ? checkout : bookedEnd;
+
+        document.getElementById('modal-entry').innerText = formatTime(entryTime);
+        document.getElementById('modal-exit').innerText = formatTime(exitTime);
+
+        let durationText = "--";
+        let actualDurationHours = 0;
+
+        if (checkin && checkin !== 'None' && checkout && checkout !== 'None') {
+            const start = new Date(checkin);
+            const end = new Date(checkout);
+            const diffMs = end - start;
+            const diffHrs = Math.floor(diffMs / 3600000);
+            const diffMins = Math.round(((diffMs % 3600000) / 60000));
+            durationText = `${diffHrs}h ${diffMins}m`;
+            actualDurationHours = diffMs / 3600000;
+        } else if (bookedDurationHours) {
+            durationText = `${bookedDurationHours}h (Booked)`;
+        }
+        document.getElementById('modal-duration').innerText = durationText;
+
+        const couponDiv = document.getElementById('modal-coupon');
+        couponDiv.classList.add('hidden');
+
+        if (status === 'Completed' && actualDurationHours > 0 && bookedDurationHours > 0) {
+            if (actualDurationHours < bookedDurationHours) {
+                const unusedRatio = (bookedDurationHours - actualDurationHours) / bookedDurationHours;
+                let discount = Math.round(unusedRatio * 40); 
+                if (discount < 5) discount = 5;
+                if (discount > 20) discount = 20;
+                
+                document.getElementById('coupon-code').innerText = `SAVE${discount}`;
+                document.getElementById('coupon-desc').innerText = `${discount}% OFF your next booking`;
+                couponDiv.classList.remove('hidden');
+            }
+        }
+
+        document.getElementById('details-modal').classList.remove('hidden');
+    }
+
+    function closeDetailsModal() {
+        document.getElementById('details-modal').classList.add('hidden');
+    }
+
+    // Parking Timer Logic
+    document.addEventListener('DOMContentLoaded', function() {
+        const timerElement = document.getElementById('parking-timer');
+        if (timerElement) {
+            const endTimeStr = timerElement.getAttribute('data-end');
+            // Convert Python datetime string (approx format) to JS Date
+            // Note: Jinja2 default str format might need parsing, but usually works if ISO-like
+            // Ideally pass ISO format or timestamp from backend. Assuming standard string here.
+            const endTime = new Date(endTimeStr + "Z"); // Append Z if UTC
+
+            function updateTimer() {
+                const now = new Date();
+                // Adjust for timezone if necessary, assuming server sends UTC
+                const nowUtc = new Date(now.getTime() + now.getTimezoneOffset() * 60000);
+                const diff = endTime - nowUtc;
+
+                if (diff <= 0) {
+                    timerElement.innerText = "Expired";
+                    timerElement.classList.add('text-red-600');
+                } else {
+                    const minutes = Math.floor(diff / 60000);
+                    const seconds = Math.floor((diff % 60000) / 1000);
+                    timerElement.innerText = `${minutes}m ${seconds}s`;
+                }
+            }
+            setInterval(updateTimer, 1000);
+            updateTimer();
+        }
+    });
+</script>
+{% endblock %}

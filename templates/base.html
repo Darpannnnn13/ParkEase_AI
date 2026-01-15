@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}ParkEase{% endblock %}</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+    <style>
+        body { 
+            font-family: 'Inter', sans-serif; 
+            background: #f0f2f5;
+            background-image: 
+                radial-gradient(at 0% 0%, hsla(253,16%,7%,1) 0, transparent 50%), 
+                radial-gradient(at 50% 0%, hsla(225,39%,30%,1) 0, transparent 50%), 
+                radial-gradient(at 100% 0%, hsla(339,49%,30%,1) 0, transparent 50%);
+            background-size: 100% 100vh;
+            background-repeat: no-repeat;
+            background-attachment: fixed;
+            min-height: 100vh;
+        }
+        .leaflet-container { border-radius: 0.5rem; }
+        
+        /* Glassmorphism Utility */
+        .glass {
+            background: rgba(255, 255, 255, 0.85);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+        }
+        
+        .glass-dark {
+            background: rgba(15, 23, 42, 0.6);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        /* Advanced UI Enhancements */
+        .animate-pulse-slow {
+            animation: pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: .7; }
+        }
+        
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: rgba(0,0,0,0.05); }
+        ::-webkit-scrollbar-thumb { 
+            background: rgba(79, 70, 229, 0.4); 
+            border-radius: 10px; 
+        }
+        ::-webkit-scrollbar-thumb:hover { background: rgba(79, 70, 229, 0.7); }
+    </style>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#4f46e5', // Indigo 600
+                        secondary: '#0ea5e9', // Sky 500
+                        dark: '#0f172a',
+                    },
+                    animation: {
+                        'slide-up': 'slideUp 0.6s cubic-bezier(0.16, 1, 0.3, 1)',
+                    },
+                    keyframes: {
+                        slideUp: {
+                            '0%': { transform: 'translateY(20px)', opacity: '0' },
+                            '100%': { transform: 'translateY(0)', opacity: '1' },
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+</head>
+<body class="antialiased text-gray-800 flex flex-col">
+    <div id="app" class="min-h-screen flex flex-col">
+        
+        <!-- Header -->
+        <header class="glass-dark sticky top-0 z-50 shadow-lg transition-all duration-300">
+            <nav class="container mx-auto px-4 sm:px-6 lg:px-8">
+                <div class="flex items-center justify-between h-16">
+                    <div class="flex items-center">
+                        <a href="{{ url_for('index') }}" class="text-2xl font-bold text-white tracking-tight flex items-center gap-2">
+                            <div class="bg-gradient-to-br from-indigo-500 to-purple-600 w-10 h-10 rounded-lg flex items-center justify-center shadow-lg">
+                                <i class="fas fa-parking text-white"></i>
+                            </div>
+                            ParkEase
+                        </a>
+                    </div>
+                    <div class="hidden md:block">
+                        <div class="ml-10 flex items-baseline space-x-4">
+                            {% if not current_user.is_authenticated or (not current_user.is_admin and not current_user.managed_area_id) %}
+                            <a href="{{ url_for('index') }}" class="text-gray-300 hover:text-white hover:bg-white/10 px-3 py-2 rounded-md text-sm font-medium transition-all">Live Map</a>
+                            {% endif %}
+                            {% if current_user.is_authenticated %}
+                                {% if current_user.is_admin %}
+                                    <a href="{{ url_for('admin_dashboard') }}" class="text-white bg-white/10 px-3 py-2 rounded-md text-sm font-medium transition-all">Dashboard</a>
+                                {% elif current_user.managed_area_id %}
+                                    <a href="{{ url_for('manager_dashboard') }}" class="text-white bg-white/10 px-3 py-2 rounded-md text-sm font-medium transition-all">Manager Dashboard</a>
+                                    <a href="{{ url_for('manager_analytics') }}" class="text-gray-300 hover:text-white hover:bg-white/10 px-3 py-2 rounded-md text-sm font-medium transition-all">Data Analysis</a>
+                                {% else %}
+                                    <a href="{{ url_for('user_dashboard') }}" class="text-gray-300 hover:text-white hover:bg-white/10 px-3 py-2 rounded-md text-sm font-medium transition-all">My Bookings</a>
+                                    <a href="{{ url_for('user_dashboard') }}#find-my-vehicle" class="text-gray-300 hover:text-white hover:bg-white/10 px-3 py-2 rounded-md text-sm font-medium transition-all"><i class="fas fa-car-side mr-1"></i>Find My Vehicle</a>
+                                {% endif %}
+                                <!-- Profile Dropdown -->
+                                <div class="relative ml-3">
+                                    <div>
+                                        <button type="button" id="user-menu-button" class="flex text-sm bg-white/10 rounded-full focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-800 focus:ring-white" aria-expanded="false" aria-haspopup="true">
+                                            <span class="sr-only">Open user menu</span>
+                                            <div class="w-8 h-8 rounded-full bg-indigo-500 flex items-center justify-center text-white font-bold ring-2 ring-white/50">
+                                                <i class="fas fa-user"></i>
+                                            </div>
+                                        </button>
+                                    </div>
+                                    <div id="user-menu" class="origin-top-right absolute right-0 mt-2 w-48 rounded-md shadow-lg py-1 bg-white ring-1 ring-black ring-opacity-5 focus:outline-none hidden transition ease-out duration-100 transform opacity-0 scale-95" role="menu" aria-orientation="vertical" aria-labelledby="user-menu-button" tabindex="-1">
+                                        {% if not current_user.is_admin and not current_user.managed_area_id %}
+                                        <a href="{{ url_for('profile') }}" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100" role="menuitem" tabindex="-1">Edit Profile</a>
+                                        {% endif %}
+                                        <a href="{{ url_for('logout') }}" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100" role="menuitem" tabindex="-1">Logout</a>
+                                    </div>
+                                </div>
+                                {% if not current_user.is_admin and not current_user.managed_area_id %}
+                                <!-- Notification Dropdown -->
+                                <div class="relative ml-3">
+                                    <button type="button" id="notification-button" class="relative flex text-sm bg-white/10 rounded-full p-2 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-800 focus:ring-white">
+                                        <i class="fas fa-bell text-white"></i>
+                                        {% if notification_count > 0 %}
+                                        <span id="notification-badge" class="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white text-xs rounded-full flex items-center justify-center">{{ notification_count }}</span>
+                                        {% endif %}
+                                    </button>
+                                    <div id="notification-menu" class="origin-top-right absolute right-0 mt-2 w-80 rounded-md shadow-lg bg-white ring-1 ring-black ring-opacity-5 focus:outline-none hidden" role="menu">
+                                        <div class="p-2 font-bold border-b">Notifications</div>
+                                        <div id="notification-list" class="py-1 max-h-96 overflow-y-auto">
+                                            <div class="px-4 py-2 text-sm text-gray-500">Loading...</div>
+                                        </div>
+                                        <div class="border-t p-2 text-center">
+                                            <a href="{{ url_for('notifications_page') }}" class="text-xs text-primary hover:underline">View All & Manage Preferences</a>
+                                        </div>
+                                    </div>
+                                </div>
+                                {% endif %}
+                            {% else %}
+                                <a href="{{ url_for('login_page') }}" class="bg-indigo-600 text-white px-5 py-2 rounded-full text-sm font-medium hover:bg-indigo-500 shadow-lg hover:shadow-indigo-500/50 transition-all transform hover:-translate-y-0.5">Login</a>
+                                <a href="{{ url_for('register_page') }}" class="text-white border border-white/20 px-5 py-2 rounded-full text-sm font-medium hover:bg-white/10 transition-all">Register</a>
+                            {% endif %}
+                        </div>
+                    </div>
+                    <div class="-mr-2 flex md:hidden">
+                        <button id="mobile-menu-button" type="button" class="bg-white/10 inline-flex items-center justify-center p-2 rounded-md text-gray-200 hover:text-white hover:bg-white/20 focus:outline-none" aria-controls="mobile-menu" aria-expanded="false">
+                            <span class="sr-only">Open main menu</span>
+                            <i class="fas fa-bars"></i>
+                        </button>
+                    </div>
+                </div>
+            </nav>
+            <!-- Mobile menu, show/hide based on menu state. -->
+            <div class="md:hidden hidden glass-dark border-t border-white/10" id="mobile-menu">
+                <div class="px-2 pt-2 pb-3 space-y-1 sm:px-3">
+                    {% if not current_user.is_authenticated or (not current_user.is_admin and not current_user.managed_area_id) %}
+                    <a href="{{ url_for('index') }}" class="text-gray-300 hover:text-white block px-3 py-2 rounded-md text-base font-medium">Live Map</a>
+                    {% endif %}
+                    {% if current_user.is_authenticated %}
+                        {% if current_user.is_admin %}
+                            <a href="{{ url_for('admin_dashboard') }}" class="text-white bg-white/10 block px-3 py-2 rounded-md text-base font-medium">Dashboard</a>
+                        {% elif current_user.managed_area_id %}
+                            <a href="{{ url_for('manager_dashboard') }}" class="text-white bg-white/10 block px-3 py-2 rounded-md text-base font-medium">Manager Dashboard</a>
+                            <a href="{{ url_for('manager_analytics') }}" class="text-gray-300 hover:text-white block px-3 py-2 rounded-md text-base font-medium">Data Analysis</a>
+                        {% else %}
+                            <a href="{{ url_for('profile') }}" class="text-gray-300 hover:text-white block px-3 py-2 rounded-md text-base font-medium">My Profile</a>
+                            <a href="{{ url_for('user_dashboard') }}" class="text-gray-300 hover:text-white block px-3 py-2 rounded-md text-base font-medium">My Bookings</a>
+                            <a href="{{ url_for('user_dashboard') }}#find-my-vehicle" class="text-gray-300 hover:text-white block px-3 py-2 rounded-md text-base font-medium">Find My Vehicle</a>
+                        {% endif %}
+                        <a href="{{ url_for('logout') }}" class="text-gray-300 hover:text-white block px-3 py-2 rounded-md text-base font-medium">Logout</a>
+                    {% else %}
+                        <a href="{{ url_for('login_page') }}" class="bg-indigo-600 text-white block px-3 py-2 rounded-md text-base font-medium">Login</a>
+                        <a href="{{ url_for('register_page') }}" class="text-gray-300 border border-gray-500 block px-3 py-2 rounded-md text-base font-medium">Register</a>
+                    {% endif %}
+                </div>
+            </div>
+        </header>
+
+        <!-- Flash Messages -->
+        <div class="container mx-auto px-4 sm:px-6 lg:px-8 mt-4">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                <div class="p-4 rounded-md mb-4 
+                    {% if category == 'error' %}bg-red-100 text-red-700
+                    {% elif category == 'info' %}bg-blue-100 text-blue-700
+                    {% else %}bg-green-100 text-green-700
+                    {% endif %}">
+                    {{ message }}
+                </div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+        </div>
+
+        <!-- Main Content -->
+        <main class="flex-grow container mx-auto px-4 sm:px-6 lg:px-8 py-8 relative z-10">
+            {% block content %}{% endblock %}
+        </main>
+
+        <!-- Footer -->
+        <footer class="glass-dark text-center p-6 mt-auto text-gray-400">
+            <p>&copy; 2026 ParkEase. Smart Parking Solutions.</p>
+        </footer>
+
+    </div>
+
+    <!-- Scripts -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const btn = document.getElementById('mobile-menu-button');
+            const menu = document.getElementById('mobile-menu');
+            if(btn) {
+                btn.addEventListener('click', () => {
+                    menu.classList.toggle('hidden');
+                });
+            }
+
+            // Profile dropdown logic
+            const userMenuButton = document.getElementById('user-menu-button');
+            const userMenu = document.getElementById('user-menu');
+
+            if (userMenuButton) {
+                userMenuButton.addEventListener('click', () => {
+                    const isHidden = userMenu.classList.contains('hidden');
+                    if (isHidden) {
+                        userMenu.classList.remove('hidden', 'opacity-0', 'scale-95');
+                        userMenu.classList.add('opacity-100', 'scale-100');
+                    } else {
+                        userMenu.classList.remove('opacity-100', 'scale-100');
+                        userMenu.classList.add('opacity-0', 'scale-95');
+                        setTimeout(() => userMenu.classList.add('hidden'), 100); // Match transition duration
+                    }
+                });
+
+                document.addEventListener('click', (event) => {
+                    if (userMenu && userMenuButton && !userMenuButton.contains(event.target) && !userMenu.contains(event.target)) {
+                        userMenu.classList.add('hidden', 'opacity-0', 'scale-95');
+                    }
+                });
+            }
+
+            // Notification logic
+            const notificationButton = document.getElementById('notification-button');
+            const notificationMenu = document.getElementById('notification-menu');
+            const notificationList = document.getElementById('notification-list');
+            let notificationBadge = document.getElementById('notification-badge');
+
+            if (notificationButton) {
+                notificationButton.addEventListener('click', () => {
+                    const isHidden = notificationMenu.classList.contains('hidden');
+                    if (isHidden) {
+                        notificationMenu.classList.remove('hidden');
+                        fetchNotifications();
+                    } else {
+                        notificationMenu.classList.add('hidden');
+                    }
+                });
+
+                // Hide dropdown if clicked outside
+                document.addEventListener('click', (event) => {
+                    if (notificationMenu && notificationButton && !notificationButton.contains(event.target) && !notificationMenu.contains(event.target)) {
+                        notificationMenu.classList.add('hidden');
+                    }
+                });
+            }
+
+            function fetchNotifications() {
+                fetch('/api/notifications')
+                    .then(res => res.json())
+                    .then(data => {
+                        notificationList.innerHTML = '';
+                        if (data.length === 0) {
+                            notificationList.innerHTML = '<div class="px-4 py-2 text-sm text-gray-500">No new notifications.</div>';
+                        } else {
+                            data.forEach(n => {
+                                const div = document.createElement('div');
+                                div.className = 'px-4 py-2 text-sm text-gray-700 border-b hover:bg-gray-50';
+                                div.innerHTML = `<p>${n.message}</p><p class="text-xs text-gray-400">${formatTimeAgo(n.time_ago)}</p>`;
+                                notificationList.appendChild(div);
+                            });
+                        }
+                        if (notificationBadge) {
+                            notificationBadge.style.display = 'none';
+                        }
+                    });
+            }
+
+            function formatTimeAgo(seconds) {
+                if (seconds < 60) return "just now";
+                if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
+                if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`;
+                return `${Math.floor(seconds / 86400)}d ago`;
+            }
+
+            // SocketIO listener for real-time notification updates
+            const socket = io();
+            socket.on('new_notification', function() {
+                if (!notificationBadge) {
+                    if(notificationButton) {
+                        notificationButton.innerHTML += `<span id="notification-badge" class="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white text-xs rounded-full flex items-center justify-center">1</span>`;
+                        notificationBadge = document.getElementById('notification-badge');
+                    }
+                } else {
+                    notificationBadge.style.display = 'flex';
+                    let currentCount = parseInt(notificationBadge.innerText) || 0;
+                    notificationBadge.innerText = currentCount + 1;
+                }
+            });
+        });
+    </script>
+    {% block scripts %}{% endblock %}
+</body>
+</html>

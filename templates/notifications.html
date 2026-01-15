@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+
+{% block title %}Notifications & Preferences - ParkEase{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto animate-slide-up">
+    <h1 class="text-3xl font-bold text-white mb-8 drop-shadow-md text-center">Notifications & Preferences</h1>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+        
+        <!-- Notifications Section -->
+        <div class="glass p-6 rounded-2xl shadow-xl">
+            <h2 class="text-xl font-bold mb-4 text-gray-800 flex items-center"><i class="fas fa-bell mr-2 text-primary"></i>Recent Notifications</h2>
+            <div class="space-y-3 max-h-[500px] overflow-y-auto pr-2">
+                {% for notification in notifications %}
+                <div class="bg-white/60 p-3 rounded-lg border border-gray-100">
+                    <p class="text-gray-800 text-sm">{{ notification.message }}</p>
+                    <p class="text-xs text-gray-500 mt-1">{{ notification.timestamp.strftime('%Y-%m-%d %H:%M') }}</p>
+                </div>
+                {% else %}
+                <p class="text-gray-500 text-center py-4">No notifications yet.</p>
+                {% endfor %}
+            </div>
+        </div>
+
+        <!-- Preferences Section -->
+        <div class="glass p-6 rounded-2xl shadow-xl">
+            <h2 class="text-xl font-bold mb-4 text-gray-800 flex items-center"><i class="fas fa-star mr-2 text-yellow-500"></i>My Preferences</h2>
+            <p class="text-sm text-gray-600 mb-4">Watch specific levels in parking areas. You will be notified when any slot on that level becomes available.</p>
+            
+            <!-- Add Preference Form -->
+            <form id="add-pref-form" class="mb-6 bg-white/50 p-4 rounded-xl border border-gray-200">
+                <h3 class="font-bold text-sm text-gray-700 mb-2">Add New Preference</h3>
+                <div class="space-y-3">
+                    <select id="pref-area" class="w-full px-3 py-2 rounded-lg border border-gray-300 text-sm focus:ring-2 focus:ring-primary">
+                        <option value="">Select Area</option>
+                        {% for area in all_areas %}
+                        <option value="{{ area._id }}">{{ area.name }}</option>
+                        {% endfor %}
+                    </select>
+                    <select id="pref-level" class="w-full px-3 py-2 rounded-lg border border-gray-300 text-sm focus:ring-2 focus:ring-primary">
+                        <option value="">Select Level</option>
+                        <option value="1">Level 1</option>
+                    </select>
+                    <button type="button" onclick="addPreference()" class="w-full bg-primary text-white font-bold py-2 rounded-lg text-sm hover:bg-indigo-700 transition">Add Preference</button>
+                </div>
+            </form>
+
+            <!-- List Preferences -->
+            <div class="space-y-3">
+                {% for pref in preferences %}
+                <div class="flex justify-between items-center bg-white/60 p-3 rounded-lg border border-gray-100">
+                    <div>
+                        <p class="font-bold text-gray-800 text-sm">{{ pref.area_name }}</p>
+                        <p class="text-xs text-gray-600">Level: {{ pref.level }}</p>
+                    </div>
+                    <form action="{{ url_for('remove_preference') }}" method="POST">
+                        <input type="hidden" name="pref_id" value="{{ pref._id }}">
+                        <button type="submit" class="text-red-500 hover:text-red-700 text-xs font-medium"><i class="fas fa-trash"></i> Remove</button>
+                    </form>
+                </div>
+                {% else %}
+                <p class="text-gray-500 text-center py-4">No preferences set.</p>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    function addPreference() {
+        const areaId = document.getElementById('pref-area').value;
+        const level = document.getElementById('pref-level').value;
+
+        if (!areaId || !level) {
+            alert("Please select an area and a level.");
+            return;
+        }
+
+        fetch('/set_preference', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ area_id: areaId, level: parseInt(level) })
+        }).then(res => res.json()).then(data => {
+            if(data.status === 'success') location.reload();
+        });
+    }
+</script>
+{% endblock %}

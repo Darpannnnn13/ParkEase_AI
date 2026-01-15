@@ -1,0 +1,118 @@
+{% extends "base.html" %}
+
+{% block title %}Analytics - ParkEase{% endblock %}
+
+{% block content %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<div class="animate-slide-up">
+    <div class="flex justify-between items-center mb-8">
+        <h1 class="text-3xl font-bold text-white drop-shadow-md">Area Analytics</h1>
+        <div class="flex items-center space-x-4">
+            <a href="{{ url_for('manager_dashboard') }}" class="bg-white/20 hover:bg-white/30 backdrop-blur px-4 py-2 rounded-lg text-white font-semibold border border-white/30 transition-all">
+                <i class="fas fa-arrow-left mr-2"></i>Back to Dashboard
+            </a>
+            <div class="bg-white/20 backdrop-blur px-4 py-2 rounded-lg text-white font-semibold border border-white/30">
+                <i class="fas fa-map-marker-alt mr-2"></i>{{ area.name }}
+            </div>
+        </div>
+    </div>
+
+    <!-- Stats Cards -->
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-6 mb-8">
+        <div class="glass p-6 rounded-2xl shadow-xl flex items-center justify-between border-b-4 border-green-500">
+            <div>
+                <div class="text-sm font-medium text-gray-500">Total Revenue</div>
+                <div class="text-3xl font-bold text-gray-800">${{ "%.2f"|format(revenue) }}</div>
+            </div>
+            <div class="bg-green-100 text-green-600 w-12 h-12 flex items-center justify-center rounded-xl">
+                <i class="fas fa-dollar-sign text-2xl"></i>
+            </div>
+        </div>
+        <div class="glass p-6 rounded-2xl shadow-xl flex items-center justify-between border-b-4 border-primary">
+            <div>
+                <div class="text-sm font-medium text-gray-500">Active Vehicles</div>
+                <div class="text-3xl font-bold text-gray-800">{{ active_bookings_count }}</div>
+            </div>
+            <div class="bg-indigo-100 text-indigo-600 w-12 h-12 flex items-center justify-center rounded-xl">
+                <i class="fas fa-car text-2xl"></i>
+            </div>
+        </div>
+        <div class="glass p-6 rounded-2xl shadow-xl flex items-center justify-between border-b-4 border-yellow-500">
+            <div>
+                <div class="text-sm font-medium text-gray-500">Occupancy</div>
+                <div class="text-3xl font-bold text-gray-800">{{ occupancy }}%</div>
+            </div>
+            <div class="bg-yellow-100 text-yellow-600 w-12 h-12 flex items-center justify-center rounded-xl">
+                <i class="fas fa-chart-pie text-2xl"></i>
+            </div>
+        </div>
+    </div>
+
+    <!-- Analytics Charts -->
+    <div class="glass p-6 rounded-2xl shadow-xl mb-8">
+        <h2 class="text-xl font-bold text-gray-800 mb-4 flex items-center"><i class="fas fa-chart-line mr-2 text-primary"></i>Revenue Trend</h2>
+        <div class="h-80">
+            <canvas id="revenueChart"></canvas>
+        </div>
+        <div class="mt-4 text-sm text-gray-600 text-center">
+            Revenue trend for the last 30 days.
+        </div>
+    </div>
+
+    <!-- Calendar View -->
+    <div class="glass p-6 rounded-2xl shadow-xl mb-8">
+        <h2 class="text-xl font-bold text-gray-800 mb-6 flex items-center"><i class="fas fa-calendar-alt mr-2 text-primary"></i>Earnings & Bookings Calendar</h2>
+        
+        <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4">
+            {% for day in calendar_data %}
+            <div class="bg-white/60 p-3 rounded-xl border border-gray-200 hover:shadow-md transition-all flex flex-col justify-between h-24">
+                <div class="text-xs font-bold text-gray-500 uppercase">{{ day._id }}</div>
+                <div>
+                    <div class="text-lg font-bold text-gray-800">${{ "%.0f"|format(day.daily_revenue) }}</div>
+                    <div class="text-xs text-gray-600">{{ day.daily_bookings }} Bookings</div>
+                </div>
+            </div>
+            {% else %}
+            <div class="col-span-full text-center text-gray-500 py-8">No historical data available.</div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+
+<script>
+    // Chart.js Logic
+    document.addEventListener('DOMContentLoaded', function() {
+        const ctx = document.getElementById('revenueChart').getContext('2d');
+        
+        // Prepare data from Jinja2
+        const labels = [{% for day in calendar_data %}"{{ day._id }}",{% endfor %}];
+        const data = [{% for day in calendar_data %}{{ day.daily_revenue }},{% endfor %}];
+
+        new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: 'Daily Revenue ($)',
+                    data: data,
+                    borderColor: '#4f46e5',
+                    backgroundColor: 'rgba(79, 70, 229, 0.1)',
+                    tension: 0.4,
+                    fill: true
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false }
+                },
+                scales: {
+                    y: { beginAtZero: true }
+                }
+            }
+        });
+    });
+</script>
+{% endblock %}
