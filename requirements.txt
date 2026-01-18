@@ -3,7 +3,7 @@ Flask-PyMongo
 Flask-Login
 Flask-SocketIO
 python-dotenv
-pymongo[srv]
+pymongo
 dnspython
 werkzeug
 gunicorn
