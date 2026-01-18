@@ -4,14 +4,14 @@
 
 {% block content %}
 <div class="animate-slide-up">
-    <h1 class="text-3xl font-bold text-white mb-8 drop-shadow-md">User Dashboard</h1>
+    <h1 class="text-2xl sm:text-3xl font-bold text-white mb-6 sm:mb-8 drop-shadow-md">User Dashboard</h1>
 
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
 
         <!-- Left Column: Profile and Car -->
         <div class="lg:col-span-1 space-y-8">
             <!-- Profile Card -->
-            <div class="glass p-6 rounded-2xl shadow-xl relative overflow-hidden group">
+            <div class="glass p-4 sm:p-6 rounded-2xl shadow-xl relative overflow-hidden group">
                 <div class="absolute top-0 right-0 -mt-4 -mr-4 w-24 h-24 bg-gradient-to-br from-primary to-purple-600 rounded-full opacity-20 group-hover:scale-150 transition-transform duration-500"></div>
                 <h2 class="text-xl font-bold mb-6 flex items-center text-gray-800"><i class="fas fa-id-card mr-3 text-primary"></i>My Profile</h2>
                 <div class="space-y-4">
@@ -34,7 +34,7 @@
             </div>
 
             <!-- Find My Vehicle Card -->
-            <div id="find-my-vehicle" class="glass p-6 rounded-2xl shadow-xl border-l-4 border-secondary">
+            <div id="find-my-vehicle" class="glass p-4 sm:p-6 rounded-2xl shadow-xl border-l-4 border-secondary">
                 <h2 class="text-xl font-bold mb-4 flex items-center text-gray-800">
                     {% if current_user.vehicle_type == 'Bike' %}
                     <i class="fas fa-motorcycle mr-3 text-secondary"></i>Find My Bike
@@ -73,9 +73,9 @@
         </div>
 
         <!-- Right Column: Booking History -->
-        <div class="lg:col-span-2 glass p-8 rounded-2xl shadow-xl">
+        <div class="lg:col-span-2 glass p-4 sm:p-8 rounded-2xl shadow-xl">
             <h2 class="text-2xl font-bold mb-6 text-gray-800 flex items-center"><i class="fas fa-history mr-3 text-primary"></i>My Bookings</h2>
-            <div class="overflow-hidden rounded-xl border border-gray-200 shadow-sm">
+            <div class="overflow-x-auto rounded-xl border border-gray-200 shadow-sm">
                 <table class="min-w-full text-sm text-left text-gray-500">
                     <thead class="text-xs text-gray-700 uppercase bg-gray-100/80 backdrop-blur">
                     <tr>
@@ -91,11 +91,16 @@
                     {% for booking in bookings %}
                     <tr class="bg-white/60 border-b hover:bg-white hover:shadow-sm transition-all duration-200 transform hover:scale-[1.01]">
                         <th scope="row" class="px-6 py-4 font-medium text-gray-900">
-                            {{ booking.start_time.strftime('%b %d, %H:%M') }} - 
-                            {{ booking.end_time.strftime('%H:%M') }}
+                            <div>{{ booking.start_time.strftime('%b %d, %H:%M') }} - {{ booking.end_time.strftime('%H:%M') }}</div>
+                            <div class="text-xs text-gray-500 font-normal mt-1"><i class="fas fa-hourglass-half mr-1"></i>{{ booking.duration }} Hr{% if booking.duration > 1 %}s{% endif %}</div>
                         </th>
                         <td class="px-6 py-4">
-                            {% if booking.status == 'Active' %}
+                            {% if booking.status == 'Completed' %}
+                                <div class="flex flex-col">
+                                    <span class="text-[10px] text-gray-500 uppercase font-bold">Total Paid</span>
+                                    <span class="font-mono font-bold text-green-600 bg-green-50 px-2 py-1 rounded border border-green-200">₹{{ "%.2f"|format(booking.amount) }}</span>
+                                </div>
+                            {% elif booking.status == 'Active' %}
                                 <div class="flex flex-col">
                                     <span class="text-[10px] text-gray-500 uppercase font-bold">Exit Token</span>
                                     <span class="font-mono font-bold text-red-600 bg-red-50 px-2 py-1 rounded border border-red-200">{{ booking.exit_token }}</span>
@@ -116,7 +121,7 @@
                             <div class="flex items-center space-x-2">
                                 {% if booking.status == 'Pending Payment' %}
                                 <form action="{{ url_for('pay_booking', booking_id=booking._id) }}" method="POST">
-                                    <button type="submit" class="text-xs bg-primary text-white px-3 py-1 rounded hover:bg-indigo-700 transition">Pay ${{ "%.2f"|format(booking.amount) }}</button>
+                                    <button type="submit" class="text-xs bg-primary text-white px-3 py-1 rounded hover:bg-indigo-700 transition">Pay ₹{{ "%.2f"|format(booking.amount) }}</button>
                                 </form>
                                 {% elif booking.status == 'Active' %}
                                 <form action="{{ url_for('extend_booking', booking_id=booking._id) }}" method="POST" class="flex items-center space-x-1">
@@ -305,9 +310,7 @@
 
             function updateTimer() {
                 const now = new Date();
-                // Adjust for timezone if necessary, assuming server sends UTC
-                const nowUtc = new Date(now.getTime() + now.getTimezoneOffset() * 60000);
-                const diff = endTime - nowUtc;
+                const diff = endTime - now;
 
                 if (diff <= 0) {
                     timerElement.innerText = "Expired";

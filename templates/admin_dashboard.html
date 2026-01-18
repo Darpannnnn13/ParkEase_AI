@@ -4,71 +4,121 @@
 
 {% block content %}
 <div class="animate-slide-up">
-    <h1 class="text-4xl font-bold text-white mb-8 drop-shadow-md">Admin Dashboard</h1>
+    <h1 class="text-3xl sm:text-4xl font-bold text-white mb-8 drop-shadow-md">Admin Dashboard</h1>
 
-    <!-- Stats Cards -->
-    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-        <!-- Card 1: Revenue -->
-        <div class="glass p-6 rounded-2xl shadow-xl flex items-center justify-between transform hover:-translate-y-2 transition-all duration-300 border-b-4 border-green-500">
-            <div>
-                <div class="text-sm font-medium text-gray-500">Total Revenue</div>
-                <div class="text-3xl font-bold text-gray-800">${{ "%.2f"|format(revenue) }}</div>
-            </div>
-            <div class="bg-gradient-to-br from-green-400 to-green-600 text-white w-12 h-12 flex items-center justify-center rounded-xl shadow-lg shadow-green-500/30">
-                <i class="fas fa-dollar-sign text-2xl"></i>
-            </div>
-        </div>
-        <!-- Card 4: New Users -->
-        <div class="glass p-6 rounded-2xl shadow-xl flex items-center justify-between transform hover:-translate-y-2 transition-all duration-300 border-b-4 border-purple-500">
-            <div>
-                <div class="text-sm font-medium text-gray-500">New Users Today</div>
-                <div class="text-3xl font-bold text-gray-800">{{ new_users }}</div>
-            </div>
-            <div class="bg-gradient-to-br from-purple-400 to-purple-600 text-white w-12 h-12 flex items-center justify-center rounded-xl shadow-lg shadow-purple-500/30">
-                <i class="fas fa-users text-2xl"></i>
-            </div>
-        </div>
-    </div>
-
-    <!-- Main Content Area -->
-    <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        <!-- Parking Area Management -->
-        <div class="lg:col-span-3 glass p-6 rounded-2xl shadow-xl flex flex-col">
-            <h2 class="text-2xl font-bold mb-6 text-gray-800">Manage Areas</h2>
-            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
-                {% for area in areas %}
-                <div class="bg-white/60 p-4 rounded-xl hover:shadow-lg hover:bg-white transition-all duration-300 border border-transparent hover:border-primary/20">
-                    <div class="flex justify-between items-center">
-                        <h3 class="font-bold text-gray-800">{{ area.name }}</h3>
-                    </div>
-                    <p class="text-sm text-gray-600 mt-1">Capacity: {{ area.capacity }}</p>
-                    <p class="text-xs text-gray-500 mt-2"><i class="fas fa-user-tie mr-1"></i>Manager: {{ area.manager_email }}</p>
-                    <div class="mt-4">
-                        <a href="{{ url_for('admin_area_details', area_id=area._id) }}" class="block w-full text-center bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-200 text-sm font-bold py-2 rounded-lg transition-colors">Manage & Analytics</a>
-                    </div>
-                </div>
-                {% else %}
-                <p class="text-sm text-gray-500 text-center">No parking areas found. Add one below.</p>
-                {% endfor %}
-            </div>
-                
-            <!-- Module 2: Add Area Form -->
-            <form action="{{ url_for('add_parking_area') }}" method="POST" class="mt-6 space-y-3 border-t pt-4 border-gray-200">
-                <h3 class="font-bold text-gray-800">Add New Area</h3>
+    <!-- Top Section: Add Area & Managers -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+        
+        <!-- Add Area Form -->
+        <div class="glass p-4 sm:p-6 rounded-2xl shadow-xl">
+            <h2 class="text-2xl font-bold mb-6 text-gray-800">Add New Area</h2>
+            <form action="{{ url_for('add_parking_area') }}" method="POST" class="space-y-4">
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <input type="text" name="name" placeholder="Area Name" class="w-full px-3 py-2 rounded-lg border bg-white/80" required>
-                    <input type="number" name="capacity" placeholder="Capacity" class="w-full px-3 py-2 rounded-lg border bg-white/80" required>
+                    <input type="text" name="name" placeholder="Area Name" class="w-full px-3 py-2 rounded-lg border bg-white/80 focus:ring-2 focus:ring-primary outline-none" required>
+                    <input type="number" name="capacity" placeholder="Capacity" class="w-full px-3 py-2 rounded-lg border bg-white/80 focus:ring-2 focus:ring-primary outline-none" required>
                 </div>
                 <div class="flex space-x-2">
-                    <input type="text" name="lat" placeholder="Latitude" class="w-1/2 px-3 py-2 rounded-lg border bg-white/80" required>
-                    <input type="text" name="lng" placeholder="Longitude" class="w-1/2 px-3 py-2 rounded-lg border bg-white/80" required>
+                    <input type="text" name="lat" placeholder="Latitude" class="w-1/2 px-3 py-2 rounded-lg border bg-white/80 focus:ring-2 focus:ring-primary outline-none" required>
+                    <input type="text" name="lng" placeholder="Longitude" class="w-1/2 px-3 py-2 rounded-lg border bg-white/80 focus:ring-2 focus:ring-primary outline-none" required>
                 </div>
-                <input type="email" name="manager_email" placeholder="Manager Email (User must exist)" class="w-full px-3 py-2 rounded-lg border bg-white/80">
-                <button type="submit" class="w-full bg-gradient-to-r from-secondary to-teal-500 text-white font-bold py-2 px-4 rounded-xl hover:shadow-lg transition-all">
+                <input type="email" name="manager_email" placeholder="Manager Email (User must exist)" class="w-full px-3 py-2 rounded-lg border bg-white/80 focus:ring-2 focus:ring-primary outline-none">
+                <button type="submit" class="w-full bg-gradient-to-r from-secondary to-teal-500 text-white font-bold py-2 px-4 rounded-xl hover:shadow-lg transition-all transform hover:-translate-y-0.5">
                     <i class="fas fa-plus mr-2"></i>Add Area
                 </button>
             </form>
         </div>
+
+        <!-- Managers List -->
+        <div class="glass p-4 sm:p-6 rounded-2xl shadow-xl flex flex-col max-h-[400px]">
+            <h2 class="text-2xl font-bold mb-6 text-gray-800">Active Managers</h2>
+            <div class="overflow-y-auto rounded-xl border border-gray-200 flex-grow">
+                <table class="min-w-full text-sm text-left text-gray-500">
+                    <thead class="text-xs text-gray-700 uppercase bg-gray-100 sticky top-0 z-10">
+                        <tr>
+                            <th class="px-6 py-3">Name</th>
+                            <th class="px-6 py-3">Managed Area</th>
+                            <th class="px-6 py-3 text-center">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody class="bg-white divide-y divide-gray-200">
+                        {% for mgr in managers %}
+                        <tr class="hover:bg-gray-50 transition-colors">
+                            <td class="px-6 py-4 font-medium text-gray-900">
+                                {{ mgr.full_name }}<br>
+                                <span class="text-xs text-gray-500">{{ mgr.email }}</span>
+                            </td>
+                            <td class="px-6 py-4">{{ mgr.area_name }}</td>
+                            <td class="px-6 py-4 text-center">
+                                <a href="{{ url_for('admin_user_details', user_id=mgr._id) }}" class="text-indigo-600 hover:text-indigo-900 font-bold text-xs bg-indigo-50 px-3 py-1 rounded border border-indigo-200">View</a>
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr><td colspan="3" class="px-6 py-4 text-center text-gray-500">No managers assigned.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Parking Area Management -->
+    <div class="glass p-4 sm:p-6 rounded-2xl shadow-xl flex flex-col">
+        <div class="flex flex-col sm:flex-row justify-between items-center mb-6 gap-4">
+            <h2 class="text-2xl font-bold text-gray-800">Manage Areas</h2>
+            <div class="relative w-full sm:w-64">
+                <input type="text" id="areaSearchInput" placeholder="Search areas..." class="w-full px-4 py-2 pl-10 bg-white/50 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary">
+                <i class="fas fa-search absolute left-3 top-3 text-gray-400"></i>
+            </div>
+        </div>
+        
+        <div id="areasGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {% for area in areas %}
+            <div class="area-card bg-white/60 p-4 rounded-xl hover:shadow-lg hover:bg-white transition-all duration-300 border border-transparent hover:border-primary/20">
+                <div class="flex justify-between items-center">
+                    <h3 class="font-bold text-gray-800 area-name">{{ area.name }}</h3>
+                </div>
+                <p class="text-sm text-gray-600 mt-1">Capacity: {{ area.capacity }}</p>
+                <p class="text-xs text-gray-500 mt-2"><i class="fas fa-user-tie mr-1"></i>Manager: <span class="manager-email">{{ area.manager_email }}</span></p>
+                <div class="mt-4">
+                    <a href="{{ url_for('admin_area_details', area_id=area._id) }}" class="block w-full text-center bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-200 text-sm font-bold py-2 rounded-lg transition-colors">Manage & Analytics</a>
+                </div>
+            </div>
+            {% else %}
+            <p class="col-span-full text-sm text-gray-500 text-center py-8">No parking areas found.</p>
+            {% endfor %}
+        </div>
+        <p id="noResultsMsg" class="hidden text-center text-gray-500 py-8">No areas match your search.</p>
     </div>
 </div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const searchInput = document.getElementById('areaSearchInput');
+        const areaCards = document.querySelectorAll('.area-card');
+        const noResultsMsg = document.getElementById('noResultsMsg');
+
+        searchInput.addEventListener('input', function(e) {
+            const searchTerm = e.target.value.toLowerCase();
+            let hasVisible = false;
+
+            areaCards.forEach(card => {
+                const name = card.querySelector('.area-name').innerText.toLowerCase();
+                const manager = card.querySelector('.manager-email').innerText.toLowerCase();
+                
+                if (name.includes(searchTerm) || manager.includes(searchTerm)) {
+                    card.style.display = '';
+                    hasVisible = true;
+                } else {
+                    card.style.display = 'none';
+                }
+            });
+
+            if (hasVisible) {
+                noResultsMsg.classList.add('hidden');
+            } else {
+                noResultsMsg.classList.remove('hidden');
+            }
+        });
+    });
+</script>
 {% endblock %}

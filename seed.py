@@ -1,18 +1,30 @@
 import os
 import random
 from pymongo import MongoClient
+from pymongo.errors import ConfigurationError
 from werkzeug.security import generate_password_hash
 from dotenv import load_dotenv
-from datetime import datetime
+from datetime import datetime, timedelta
 
 # Load environment variables
 load_dotenv()
 
 # --- Configuration ---
-MONGO_URI = os.getenv("MONGO_URI", "mongodb://localhost:27017/parkease")
+MONGO_URI = os.getenv("MONGO_URI")
+if not MONGO_URI:
+    print("Warning: MONGO_URI not found in .env, defaulting to localhost.")
+    MONGO_URI = "mongodb://localhost:27017/parkease"
+
 client = MongoClient(MONGO_URI)
-db = client.get_database()
-if db.name == 'test' and 'parkease' in MONGO_URI:
+
+# Atlas connection strings often default to 'test' or 'admin' if the db name isn't in the path.
+# We force the use of 'parkease' if the default db seems generic.
+try:
+    db = client.get_database()
+except ConfigurationError:
+    db = client['parkease']
+
+if db.name == 'test' or db.name == 'admin':
     db = client['parkease']
 
 def seed_data():
@@ -29,6 +41,7 @@ def seed_data():
     db.slots.drop()
     db.notifications.drop()
     db.slot_preferences.drop()
+    db.slot_locks.drop()
     print("Cleared existing collections.")
 
     # 2. Seed Demo User
@@ -38,7 +51,8 @@ def seed_data():
             "password": generate_password_hash("adminpassword", method='pbkdf2:sha256'),
             "full_name": "Admin User",
             "is_admin": True,
-            "vehicle_number": "MH-01-AD-0001",
+            "vehicle_number": "Not Set",
+            "vehicle_type": "Car",
             "created_at": datetime.utcnow()
         },
         {
@@ -55,8 +69,8 @@ def seed_data():
             "password": generate_password_hash("managerpassword", method='pbkdf2:sha256'),
             "full_name": "Area Manager",
             "is_admin": False,
-            "vehicle_number": "MH-04-MG-5555",
-            "vehicle_type": "Bike",
+            "vehicle_number": "Not Set",
+            "vehicle_type": "Car",
             "created_at": datetime.utcnow()
         }
     ]
@@ -203,6 +217,73 @@ def seed_data():
         db.slots.create_index([("area_id", 1), ("slot_number", 1)])
     
     print(f"Total slots seeded: {len(all_slots)}")
+
+    # 5. Seed Sample Bookings
+    print("Seeding sample bookings...")
+    demo_user = db.users.find_one({"email": "demo1@gmail.com"})
+    first_area = db.parking_areas.find_one({"name": "Gateway of India Plaza"})
+
+    if demo_user and first_area:
+        bookings_data = [
+            {
+                "user_id": demo_user["_id"],
+                "area_id": first_area["_id"],
+                "area_name": first_area["name"],
+                "start_time": datetime.utcnow() - timedelta(hours=5),
+                "end_time": datetime.utcnow() - timedelta(hours=3),
+                "grace_period_end": datetime.utcnow() - timedelta(hours=5) + timedelta(minutes=15),
+                "duration": 2,
+                "spots": 1,
+                "status": "Completed",
+                "slot_ids": ["L1-C01"],
+                "amount": 200.0,
+                "booking_token": "DEMO1234",
+                "exit_token": "EXIT1234",
+                "coordinates": first_area["location"]["coordinates"],
+                "vehicle_number": demo_user["vehicle_number"],
+                "created_at": datetime.utcnow() - timedelta(hours=6),
+                "check_in_time": datetime.utcnow() - timedelta(hours=5),
+                "check_out_time": datetime.utcnow() - timedelta(hours=3)
+            }
+        ]
+        db.bookings.insert_many(bookings_data)
+        print("Inserted sample bookings.")
+
+    # 6. Seed Notifications
+    if demo_user:
+        notifs_data = [
+            {
+                "user_id": demo_user["_id"],
+                "message": "Welcome to ParkEase! Your account has been created.",
+                "timestamp": datetime.utcnow(),
+                "read": False
+            }
+        ]
+        db.notifications.insert_many(notifs_data)
+        print("Inserted sample notifications.")
+
+    # 7. Seed Slot Preferences
+    if demo_user and first_area:
+        pref_data = {
+            "user_id": demo_user["_id"],
+            "area_id": first_area["_id"],
+            "level": 1,
+            "timestamp": datetime.utcnow()
+        }
+        db.slot_preferences.insert_one(pref_data)
+        print("Inserted sample slot preferences.")
+
+    # 8. Seed Slot Locks (Dummy expired lock to create collection)
+    if demo_user and first_area:
+        db.slot_locks.insert_one({
+            "area_id": first_area["_id"],
+            "slot_number": "L1-C99",
+            "user_id": demo_user["_id"],
+            "created_at": datetime.utcnow() - timedelta(minutes=10),
+            "expires_at": datetime.utcnow() - timedelta(minutes=5)
+        })
+        print("Inserted sample slot lock.")
+
     print("Database seeding completed successfully!")
 
 if __name__ == "__main__":

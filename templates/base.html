@@ -105,6 +105,8 @@
                             {% if current_user.is_authenticated %}
                                 {% if current_user.is_admin %}
                                     <a href="{{ url_for('admin_dashboard') }}" class="text-white bg-white/10 px-3 py-2 rounded-md text-sm font-medium transition-all">Dashboard</a>
+                                    <a href="{{ url_for('admin_users') }}" class="text-gray-300 hover:text-white hover:bg-white/10 px-3 py-2 rounded-md text-sm font-medium transition-all">Users</a>
+                                    <a href="{{ url_for('admin_analytics') }}" class="text-gray-300 hover:text-white hover:bg-white/10 px-3 py-2 rounded-md text-sm font-medium transition-all">Analytics</a>
                                 {% elif current_user.managed_area_id %}
                                     <a href="{{ url_for('manager_dashboard') }}" class="text-white bg-white/10 px-3 py-2 rounded-md text-sm font-medium transition-all">Manager Dashboard</a>
                                     <a href="{{ url_for('manager_analytics') }}" class="text-gray-300 hover:text-white hover:bg-white/10 px-3 py-2 rounded-md text-sm font-medium transition-all">Data Analysis</a>
@@ -172,6 +174,8 @@
                     {% if current_user.is_authenticated %}
                         {% if current_user.is_admin %}
                             <a href="{{ url_for('admin_dashboard') }}" class="text-white bg-white/10 block px-3 py-2 rounded-md text-base font-medium">Dashboard</a>
+                            <a href="{{ url_for('admin_users') }}" class="text-gray-300 hover:text-white block px-3 py-2 rounded-md text-base font-medium">Users</a>
+                            <a href="{{ url_for('admin_analytics') }}" class="text-gray-300 hover:text-white block px-3 py-2 rounded-md text-base font-medium">Analytics</a>
                         {% elif current_user.managed_area_id %}
                             <a href="{{ url_for('manager_dashboard') }}" class="text-white bg-white/10 block px-3 py-2 rounded-md text-base font-medium">Manager Dashboard</a>
                             <a href="{{ url_for('manager_analytics') }}" class="text-gray-300 hover:text-white block px-3 py-2 rounded-md text-base font-medium">Data Analysis</a>
@@ -179,6 +183,12 @@
                             <a href="{{ url_for('profile') }}" class="text-gray-300 hover:text-white block px-3 py-2 rounded-md text-base font-medium">My Profile</a>
                             <a href="{{ url_for('user_dashboard') }}" class="text-gray-300 hover:text-white block px-3 py-2 rounded-md text-base font-medium">My Bookings</a>
                             <a href="{{ url_for('user_dashboard') }}#find-my-vehicle" class="text-gray-300 hover:text-white block px-3 py-2 rounded-md text-base font-medium">Find My Vehicle</a>
+                            <a href="{{ url_for('notifications_page') }}" class="text-gray-300 hover:text-white block px-3 py-2 rounded-md text-base font-medium flex items-center">
+                                Notifications
+                                {% if notification_count > 0 %}
+                                <span class="ml-2 bg-red-500 text-white text-xs font-bold px-2 py-0.5 rounded-full">{{ notification_count }}</span>
+                                {% endif %}
+                            </a>
                         {% endif %}
                         <a href="{{ url_for('logout') }}" class="text-gray-300 hover:text-white block px-3 py-2 rounded-md text-base font-medium">Logout</a>
                     {% else %}

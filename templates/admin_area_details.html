@@ -8,7 +8,7 @@
 <div class="animate-slide-up">
     <div class="flex justify-between items-center mb-8">
         <div>
-            <h1 class="text-3xl font-bold text-white drop-shadow-md">{{ area.name }}</h1>
+            <h1 class="text-2xl sm:text-3xl font-bold text-white drop-shadow-md">{{ area.name }}</h1>
             <p class="text-gray-200 text-sm mt-1">Detailed Analysis & Management</p>
         </div>
         <a href="{{ url_for('admin_dashboard') }}" class="bg-white/20 hover:bg-white/30 backdrop-blur px-4 py-2 rounded-lg text-white font-semibold border border-white/30 transition-all">
@@ -18,7 +18,7 @@
 
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-8">
         <!-- Manager Assignment Card -->
-        <div class="glass p-6 rounded-2xl shadow-xl">
+        <div class="glass p-4 sm:p-6 rounded-2xl shadow-xl">
             <h2 class="text-xl font-bold text-gray-800 mb-4 flex items-center"><i class="fas fa-user-tie mr-2 text-primary"></i>Area Manager</h2>
             
             <div class="mb-6 p-4 bg-white/60 rounded-xl border border-gray-200">
@@ -43,7 +43,7 @@
         <div class="lg:col-span-2 grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div class="glass p-4 rounded-2xl shadow-lg flex flex-col justify-between border-b-4 border-green-500">
                 <div class="text-sm font-medium text-gray-500">Total Revenue</div>
-                <div class="text-2xl font-bold text-gray-800">${{ "%.2f"|format(revenue) }}</div>
+                <div class="text-2xl font-bold text-gray-800">₹{{ "%.2f"|format(revenue) }}</div>
                 <div class="mt-2 text-right"><i class="fas fa-dollar-sign text-green-500 text-xl"></i></div>
             </div>
             <div class="glass p-4 rounded-2xl shadow-lg flex flex-col justify-between border-b-4 border-primary">
@@ -58,7 +58,7 @@
             </div>
             
             <!-- Revenue Chart -->
-            <div class="col-span-full glass p-6 rounded-2xl shadow-xl mt-4">
+            <div class="col-span-full glass p-4 sm:p-6 rounded-2xl shadow-xl mt-4">
                 <h3 class="font-bold text-gray-800 mb-4">Revenue Trend</h3>
                 <div class="h-48">
                     <canvas id="adminRevenueChart"></canvas>
@@ -68,7 +68,7 @@
     </div>
 
     <!-- Calendar View -->
-    <div class="glass p-6 rounded-2xl shadow-xl mb-8">
+    <div class="glass p-4 sm:p-6 rounded-2xl shadow-xl mb-8">
         <h2 class="text-xl font-bold text-gray-800 mb-6 flex items-center"><i class="fas fa-calendar-alt mr-2 text-primary"></i>Detailed Calendar Analysis</h2>
         
         <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4">
@@ -76,7 +76,7 @@
             <div class="bg-white/60 p-3 rounded-xl border border-gray-200 hover:shadow-md transition-all flex flex-col justify-between h-24 group hover:bg-white">
                 <div class="text-xs font-bold text-gray-500 uppercase group-hover:text-primary">{{ day._id }}</div>
                 <div>
-                    <div class="text-lg font-bold text-gray-800">${{ "%.0f"|format(day.daily_revenue) }}</div>
+                    <div class="text-lg font-bold text-gray-800">₹{{ "%.0f"|format(day.daily_revenue) }}</div>
                     <div class="text-xs text-gray-600">{{ day.daily_bookings }} Bookings</div>
                 </div>
             </div>
@@ -100,7 +100,7 @@
             data: {
                 labels: labels,
                 datasets: [{
-                    label: 'Daily Revenue ($)',
+                    label: 'Daily Revenue (₹)',
                     data: data,
                     borderColor: '#4f46e5',
                     backgroundColor: 'rgba(79, 70, 229, 0.1)',

@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+
+{% block title %}Manage Users - ParkEase{% endblock %}
+
+{% block content %}
+<div class="animate-slide-up">
+    <div class="flex justify-between items-center mb-8">
+        <h1 class="text-2xl sm:text-3xl font-bold text-white drop-shadow-md">User Management</h1>
+        <div class="flex space-x-4">
+            <a href="{{ url_for('admin_dashboard') }}" class="bg-white/20 hover:bg-white/30 backdrop-blur px-4 py-2 rounded-lg text-white font-semibold border border-white/30 transition-all">
+                <i class="fas fa-arrow-left mr-2"></i>Dashboard
+            </a>
+            <button onclick="document.getElementById('add-manager-modal').classList.remove('hidden')" class="bg-primary text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition font-bold shadow-md">
+                <i class="fas fa-user-plus mr-2"></i>Add Manager
+            </button>
+        </div>
+    </div>
+
+    <div class="glass p-4 sm:p-6 rounded-2xl shadow-xl">
+        <div class="overflow-x-auto rounded-xl border border-gray-200">
+            <table class="min-w-full text-sm text-left text-gray-500">
+                <thead class="text-xs text-gray-700 uppercase bg-gray-100">
+                    <tr>
+                        <th class="px-6 py-3">Name</th>
+                        <th class="px-6 py-3">Email</th>
+                        <th class="px-6 py-3">Role</th>
+                        <th class="px-6 py-3">Info / Managed Area</th>
+                        <th class="px-6 py-3">Joined</th>
+                        <th class="px-6 py-3 text-center">Action</th>
+                    </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200">
+                    {% for user in all_users %}
+                    <tr class="hover:bg-gray-50 transition-colors">
+                        <td class="px-6 py-4 font-medium text-gray-900">{{ user.full_name }}</td>
+                        <td class="px-6 py-4">{{ user.email }}</td>
+                        <td class="px-6 py-4">
+                            {% if user.is_admin %}
+                                <span class="bg-purple-100 text-purple-800 text-xs font-bold px-2 py-1 rounded border border-purple-200">Admin</span>
+                            {% elif user.managed_area_id %}
+                                <span class="bg-blue-100 text-blue-800 text-xs font-bold px-2 py-1 rounded border border-blue-200">Manager</span>
+                            {% else %}
+                                <span class="bg-gray-100 text-gray-800 text-xs font-bold px-2 py-1 rounded border border-gray-200">User</span>
+                            {% endif %}
+                        </td>
+                        <td class="px-6 py-4">
+                            {% if user.managed_area_id %}
+                                <div class="text-xs text-gray-600 font-semibold"><i class="fas fa-tasks mr-1 text-blue-500"></i>Manages: {{ user.managed_area_name }}</div>
+                            {% else %}
+                                <div class="text-xs text-gray-600"><i class="fas fa-car mr-1 text-gray-400"></i>{{ user.vehicle_number }}</div>
+                            {% endif %}
+                        </td>
+                        <td class="px-6 py-4 text-xs">{{ user.created_at.strftime('%Y-%m-%d') if user.created_at else 'N/A' }}</td>
+                        <td class="px-6 py-4 text-center">
+                            <a href="{{ url_for('admin_user_details', user_id=user._id) }}" class="text-indigo-600 hover:text-indigo-900 font-bold text-xs bg-indigo-50 px-3 py-1 rounded border border-indigo-200">View Details</a>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Add Manager Modal -->
+    <div id="add-manager-modal" class="fixed inset-0 z-50 hidden overflow-y-auto" aria-labelledby="modal-title" role="dialog" aria-modal="true">
+        <div class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
+            <div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" aria-hidden="true" onclick="document.getElementById('add-manager-modal').classList.add('hidden')"></div>
+            <span class="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
+            <div class="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
+                <form action="{{ url_for('admin_create_user') }}" method="POST">
+                    <div class="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
+                        <h3 class="text-lg leading-6 font-bold text-gray-900 mb-4">Create New Manager</h3>
+                        <input type="hidden" name="role" value="manager">
+                        <div class="space-y-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700">Full Name</label>
+                                <input type="text" name="full_name" class="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary" required>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700">Email</label>
+                                <input type="email" name="email" class="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary" required>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700">Password</label>
+                                <input type="password" name="password" class="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary" required>
+                            </div>
+                            <p class="text-xs text-gray-500 italic">Note: This account will be created with 'Manager' privileges.</p>
+                        </div>
+                    </div>
+                    <div class="bg-gray-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
+                        <button type="submit" class="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-primary text-base font-medium text-white hover:bg-indigo-700 focus:outline-none sm:ml-3 sm:w-auto sm:text-sm">Create Manager</button>
+                        <button type="button" class="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm" onclick="document.getElementById('add-manager-modal').classList.add('hidden')">Cancel</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

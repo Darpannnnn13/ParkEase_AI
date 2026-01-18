@@ -6,7 +6,7 @@
 <div class="max-w-2xl mx-auto animate-slide-up">
     <h1 class="text-3xl font-bold text-white mb-8 drop-shadow-md text-center">My Profile</h1>
 
-    <div class="glass p-8 rounded-2xl shadow-2xl border border-white/40">
+    <div class="glass p-4 sm:p-8 rounded-2xl shadow-2xl border border-white/40">
         <form action="{{ url_for('profile') }}" method="POST" class="space-y-6">
             
             <!-- Personal Details -->
@@ -30,7 +30,13 @@
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div>
                         <label class="block text-gray-700 text-sm font-bold mb-2">Vehicle Number</label>
-                        <input type="text" name="vehicle_number" value="{{ current_user.vehicle_number }}" placeholder="MH-01-AB-1234" class="w-full px-4 py-3 bg-white/50 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary">
+                        <input type="text" name="vehicle_number" value="{{ current_user.vehicle_number }}" placeholder="MH-01-AB-1234" 
+                        {% if (current_user.is_admin or current_user.managed_area_id) and current_user.vehicle_number != 'Not Set' %}
+                            readonly class="w-full px-4 py-3 bg-gray-100 border border-gray-300 rounded-xl text-gray-500 cursor-not-allowed focus:outline-none" title="Vehicle number cannot be changed for staff accounts."
+                        {% else %}
+                            class="w-full px-4 py-3 bg-white/50 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary"
+                        {% endif %}
+                        >
                     </div>
                     <div>
                         <label class="block text-gray-700 text-sm font-bold mb-2">Vehicle Type</label>

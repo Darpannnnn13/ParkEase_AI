@@ -1,0 +1,157 @@
+{% extends "base.html" %}
+
+{% block title %}Admin Analytics - ParkEase{% endblock %}
+
+{% block content %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<div class="animate-slide-up">
+    <div class="flex justify-between items-center mb-8">
+        <h1 class="text-3xl sm:text-4xl font-bold text-white drop-shadow-md">Platform Analytics</h1>
+        <div class="flex space-x-4">
+            <a href="{{ url_for('admin_dashboard') }}" class="bg-white/20 hover:bg-white/30 backdrop-blur px-4 py-2 rounded-lg text-white font-semibold border border-white/30 transition-all">
+                <i class="fas fa-arrow-left mr-2"></i>Dashboard
+            </a>
+        </div>
+    </div>
+
+    <!-- KPI Cards -->
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+        <div class="glass p-6 rounded-2xl shadow-xl border-b-4 border-green-500 flex justify-between items-center">
+            <div>
+                <div class="text-sm font-medium text-gray-500">Total Revenue</div>
+                <div class="text-3xl font-bold text-gray-800">₹{{ "%.0f"|format(total_revenue) }}</div>
+            </div>
+            <div class="bg-green-100 text-green-600 w-12 h-12 flex items-center justify-center rounded-xl">
+                <i class="fas fa-dollar-sign text-xl"></i>
+            </div>
+        </div>
+        <div class="glass p-6 rounded-2xl shadow-xl border-b-4 border-blue-500 flex justify-between items-center">
+            <div>
+                <div class="text-sm font-medium text-gray-500">Total Bookings</div>
+                <div class="text-3xl font-bold text-gray-800">{{ total_bookings }}</div>
+            </div>
+            <div class="bg-blue-100 text-blue-600 w-12 h-12 flex items-center justify-center rounded-xl">
+                <i class="fas fa-ticket-alt text-xl"></i>
+            </div>
+        </div>
+        <div class="glass p-6 rounded-2xl shadow-xl border-b-4 border-purple-500 flex justify-between items-center">
+            <div>
+                <div class="text-sm font-medium text-gray-500">Avg Duration</div>
+                <div class="text-3xl font-bold text-gray-800">{{ avg_duration }} hrs</div>
+            </div>
+            <div class="bg-purple-100 text-purple-600 w-12 h-12 flex items-center justify-center rounded-xl">
+                <i class="fas fa-hourglass-half text-xl"></i>
+            </div>
+        </div>
+        <div class="glass p-6 rounded-2xl shadow-xl border-b-4 border-orange-500 flex justify-between items-center">
+            <div>
+                <div class="text-sm font-medium text-gray-500">Peak Hour</div>
+                <div class="text-3xl font-bold text-gray-800">{{ "%02d"|format(peak_hour) }}:00</div>
+            </div>
+            <div class="bg-orange-100 text-orange-600 w-12 h-12 flex items-center justify-center rounded-xl">
+                <i class="fas fa-clock text-xl"></i>
+            </div>
+        </div>
+    </div>
+
+    <!-- Charts Section -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+        <!-- Revenue by Area Chart -->
+        <div class="glass p-6 rounded-2xl shadow-xl">
+            <h2 class="text-xl font-bold text-gray-800 mb-4"><i class="fas fa-chart-bar mr-2 text-primary"></i>Revenue by Area</h2>
+            <div class="h-64">
+                <canvas id="areaRevenueChart"></canvas>
+            </div>
+        </div>
+
+        <!-- Activity by Hour Chart -->
+        <div class="glass p-6 rounded-2xl shadow-xl">
+            <h2 class="text-xl font-bold text-gray-800 mb-4"><i class="fas fa-chart-line mr-2 text-primary"></i>Booking Activity (24h)</h2>
+            <div class="h-64">
+                <canvas id="hourlyActivityChart"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <!-- Detailed Tables -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+        <!-- Top Performing Areas -->
+        <div class="glass p-6 rounded-2xl shadow-xl">
+            <h2 class="text-xl font-bold text-gray-800 mb-4"><i class="fas fa-trophy mr-2 text-yellow-500"></i>Top Performing Areas</h2>
+            <div class="overflow-x-auto">
+                <table class="min-w-full text-sm text-left text-gray-500">
+                    <thead class="text-xs text-gray-700 uppercase bg-gray-100">
+                        <tr>
+                            <th class="px-4 py-2">Area Name</th>
+                            <th class="px-4 py-2 text-right">Bookings</th>
+                            <th class="px-4 py-2 text-right">Revenue</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for area in area_stats[:5] %}
+                        <tr class="border-b hover:bg-gray-50">
+                            <td class="px-4 py-3 font-medium text-gray-900">{{ area._id }}</td>
+                            <td class="px-4 py-3 text-right">{{ area.bookings }}</td>
+                            <td class="px-4 py-3 text-right font-bold text-green-600">₹{{ "%.0f"|format(area.revenue) }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Top Loyal Users -->
+        <div class="glass p-6 rounded-2xl shadow-xl">
+            <h2 class="text-xl font-bold text-gray-800 mb-4"><i class="fas fa-users mr-2 text-blue-500"></i>Top Loyal Users</h2>
+            <div class="overflow-x-auto">
+                <table class="min-w-full text-sm text-left text-gray-500">
+                    <thead class="text-xs text-gray-700 uppercase bg-gray-100">
+                        <tr>
+                            <th class="px-4 py-2">User</th>
+                            <th class="px-4 py-2 text-right">Bookings</th>
+                            <th class="px-4 py-2 text-right">Total Spent</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for user in top_users %}
+                        <tr class="border-b hover:bg-gray-50">
+                            <td class="px-4 py-3">
+                                <div class="font-medium text-gray-900">{{ user.name }}</div>
+                                <div class="text-xs text-gray-500">{{ user.email }}</div>
+                            </td>
+                            <td class="px-4 py-3 text-right">{{ user.count }}</td>
+                            <td class="px-4 py-3 text-right font-bold text-indigo-600">₹{{ "%.0f"|format(user.spent) }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Area Revenue Chart
+        new Chart(document.getElementById('areaRevenueChart'), {
+            type: 'bar',
+            data: {
+                labels: [{% for a in area_stats[:5] %}"{{ a._id }}",{% endfor %}],
+                datasets: [{ label: 'Revenue (₹)', data: [{% for a in area_stats[:5] %}{{ a.revenue }},{% endfor %}], backgroundColor: 'rgba(79, 70, 229, 0.6)', borderRadius: 5 }]
+            },
+            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
+        });
+
+        // Hourly Activity Chart
+        new Chart(document.getElementById('hourlyActivityChart'), {
+            type: 'line',
+            data: {
+                labels: [{% for h in range(24) %}"{{ '%02d'|format(h) }}:00",{% endfor %}],
+                datasets: [{ label: 'Bookings', data: [{% for h in range(24) %}{{ hourly_data[h] }},{% endfor %}], borderColor: '#f97316', backgroundColor: 'rgba(249, 115, 22, 0.1)', fill: true, tension: 0.4 }]
+            },
+            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } }
+        });
+    });
+</script>
+{% endblock %}

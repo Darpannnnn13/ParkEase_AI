@@ -4,3 +4,5 @@ Flask-PyMongo
 Flask-Login
 werkzeug
 python-dotenv
+flask-socketio
+eventlet

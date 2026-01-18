@@ -2,6 +2,7 @@ import os
 from flask import Flask, render_template, jsonify, request, redirect, url_for, flash
 from datetime import datetime, timedelta
 import uuid
+import math
 from flask_pymongo import PyMongo
 from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -14,7 +15,16 @@ load_dotenv()
 app = Flask(__name__)
 
 # --- Configuration ---
-app.config["MONGO_URI"] = os.getenv("MONGO_URI")
+mongo_uri = os.getenv("MONGO_URI")
+
+# Fix for Atlas connection string if database name is missing
+if mongo_uri and "mongodb+srv://" in mongo_uri and "/parkease" not in mongo_uri:
+    if "/?" in mongo_uri:
+        mongo_uri = mongo_uri.replace("/?", "/parkease?")
+    elif mongo_uri.endswith("/"):
+        mongo_uri = mongo_uri + "parkease"
+
+app.config["MONGO_URI"] = mongo_uri
 app.config["SECRET_KEY"] = os.getenv("SECRET_KEY")
 
 if not app.config["MONGO_URI"] or not app.config["SECRET_KEY"]:
@@ -134,6 +144,10 @@ def check_expiry_reminders():
         mongo.db.bookings.update_one({"_id": booking["_id"]}, {"$set": {"reminder_sent": True}})
         socketio.emit('new_notification', room=str(booking["user_id"]))
 
+def cleanup_locks():
+    """Removes expired slot locks."""
+    mongo.db.slot_locks.delete_many({"expires_at": {"$lt": datetime.utcnow()}})
+
 # --- Page Routes ---
 
 @app.route("/")
@@ -228,9 +242,16 @@ def user_dashboard():
 @login_required
 def profile():
     if request.method == "POST":
+        new_vehicle_number = request.form.get("vehicle_number")
+        
+        # Enforce immutable vehicle number for Admins and Managers if already set
+        if (current_user.is_admin or current_user.managed_area_id) and \
+           current_user.vehicle_number and current_user.vehicle_number != "Not Set":
+            new_vehicle_number = current_user.vehicle_number
+
         update_data = {
             "full_name": request.form.get("full_name"),
-            "vehicle_number": request.form.get("vehicle_number"),
+            "vehicle_number": new_vehicle_number,
             "vehicle_type": request.form.get("vehicle_type"),
             "is_ev": True if request.form.get("is_ev") else False,
             "accessibility": True if request.form.get("accessibility") else False
@@ -249,10 +270,6 @@ def book_spot():
     duration = int(request.form.get("duration", 1))
     selected_slot_ids_str = request.form.get("slot_id") 
     
-    if current_user.is_admin or current_user.managed_area_id:
-        flash("Administrators and Managers are not allowed to book parking spots.", "error")
-        return redirect(url_for("index"))
-
     # 1. Basic Validation
     if not area_id or not booking_time_str:
         flash("Please select an area and time.", "error")
@@ -298,6 +315,13 @@ def book_spot():
         flash(f"One or more selected slots are already taken for this time window.", "error")
         return redirect(url_for("index"))
     
+    # 4.1 Check for Locks (Concurrency Check)
+    for slot_id in selected_slot_ids:
+        lock = mongo.db.slot_locks.find_one({"area_id": ObjectId(area_id), "slot_number": slot_id})
+        if lock and lock["user_id"] != ObjectId(current_user.id):
+            flash(f"Slot {slot_id} is currently locked by another user. Please try again.", "error")
+            return redirect(url_for("index"))
+
     # 5. Dynamic Pricing Logic (Bike Discount)
     base_price = area.get("price", 20)
     total_amount = 0
@@ -312,6 +336,11 @@ def book_spot():
         
         total_amount += (slot_price * duration)
     
+    # Apply Staff Discount (Pay only 25%)
+    if current_user.is_admin or current_user.managed_area_id:
+        total_amount = total_amount * 0.25
+        flash("Staff discount applied: You pay only 25% of the total amount.", "info")
+
     # 6. Create Booking Document
     booking_token = uuid.uuid4().hex[:8].upper()
     exit_token = uuid.uuid4().hex[:8].upper()
@@ -342,6 +371,9 @@ def book_spot():
         {"_id": ObjectId(area_id)},
         {"$set": {"occupied": new_occupied}}
     )
+    
+    # 7.1 Cleanup Locks for this user
+    mongo.db.slot_locks.delete_many({"user_id": ObjectId(current_user.id), "area_id": ObjectId(area_id)})
 
     # 8. Real-time Notification for Map
     socketio.emit('update_availability', {
@@ -515,6 +547,7 @@ def get_area_slots(area_id):
     except:
         start_time, end_time = datetime.utcnow(), datetime.utcnow() + timedelta(hours=1)
 
+    cleanup_locks()
     slots = list(mongo.db.slots.find({"area_id": ObjectId(area_id)}).sort([("level", 1), ("slot_number", 1)]))
     
     # Find occupied slots: Fetch Active bookings (to check overstay) AND overlapping future bookings
@@ -541,12 +574,79 @@ def get_area_slots(area_id):
             for s_id in b.get("slot_ids", []):
                 occupied_set.add(s_id)
     
+    # Check for Locks
+    locks = list(mongo.db.slot_locks.find({"area_id": ObjectId(area_id)}))
+    locked_by_others = set()
+    locked_by_me = set()
+    
+    if current_user.is_authenticated:
+        for lock in locks:
+            if lock["user_id"] == ObjectId(current_user.id):
+                locked_by_me.add(lock["slot_number"])
+            else:
+                locked_by_others.add(lock["slot_number"])
+    else:
+        # If not logged in, all locks appear as occupied
+        for lock in locks:
+            locked_by_others.add(lock["slot_number"])
+
     for slot in slots:
         slot["_id"] = str(slot["_id"])
         slot["area_id"] = str(slot["area_id"])
-        slot["status"] = "Occupied" if slot["slot_number"] in occupied_set else "Available"
+        
+        if slot["slot_number"] in occupied_set:
+            slot["status"] = "Occupied"
+        elif slot["slot_number"] in locked_by_others:
+            slot["status"] = "Locked" # Visually occupied
+        elif slot["slot_number"] in locked_by_me:
+            slot["status"] = "Selected" # Pre-select for user
+        else:
+            slot["status"] = "Available"
         
     return jsonify(slots)
+
+@app.route("/api/lock_slot", methods=["POST"])
+@login_required
+def lock_slot():
+    data = request.get_json()
+    area_id = data.get("area_id")
+    slot_number = data.get("slot_number")
+    
+    cleanup_locks()
+    
+    # Check if locked by someone else
+    existing_lock = mongo.db.slot_locks.find_one({
+        "area_id": ObjectId(area_id),
+        "slot_number": slot_number
+    })
+    
+    if existing_lock and existing_lock["user_id"] != ObjectId(current_user.id):
+        return jsonify({"status": "error", "message": "Slot is currently locked by another user."}), 409
+
+    # Create or Update Lock (Extend expiry)
+    mongo.db.slot_locks.update_one(
+        {"area_id": ObjectId(area_id), "slot_number": slot_number},
+        {
+            "$set": {
+                "user_id": ObjectId(current_user.id),
+                "created_at": datetime.utcnow(),
+                "expires_at": datetime.utcnow() + timedelta(minutes=5)
+            }
+        },
+        upsert=True
+    )
+    return jsonify({"status": "success"})
+
+@app.route("/api/unlock_slot", methods=["POST"])
+@login_required
+def unlock_slot():
+    data = request.get_json()
+    mongo.db.slot_locks.delete_one({
+        "area_id": ObjectId(data.get("area_id")),
+        "slot_number": data.get("slot_number"),
+        "user_id": ObjectId(current_user.id)
+    })
+    return jsonify({"status": "success"})
 
 @app.route("/manager/dashboard")
 @login_required
@@ -628,22 +728,51 @@ def manager_analytics():
                            occupancy=occupancy,
                            calendar_data=calendar_data)
 
+@app.route("/manager/api/daily_details/<date_str>")
+@login_required
+def manager_daily_details(date_str):
+    if not current_user.managed_area_id:
+        return jsonify({"error": "Unauthorized"}), 403
+    
+    area_id = ObjectId(current_user.managed_area_id)
+    
+    try:
+        # Parse date string (YYYY-MM-DD)
+        start_date = datetime.strptime(date_str, "%Y-%m-%d")
+        end_date = start_date + timedelta(days=1)
+    except ValueError:
+        return jsonify({"error": "Invalid date format"}), 400
+
+    # Query bookings starting on this day
+    bookings = list(mongo.db.bookings.find({
+        "area_id": area_id,
+        "start_time": {"$gte": start_date, "$lt": end_date},
+        "status": {"$in": ["Active", "Confirmed", "Completed"]}
+    }).sort("start_time", 1))
+
+    details = []
+    for b in bookings:
+        user = mongo.db.users.find_one({"_id": b["user_id"]})
+        details.append({
+            "vehicle": b.get("vehicle_number", "N/A"),
+            "user": user["email"] if user else "Unknown",
+            "slots": ", ".join(b.get("slot_ids", [])),
+            "start": b["start_time"].strftime("%H:%M"),
+            "end": b["end_time"].strftime("%H:%M"),
+            "check_in": b.get("check_in_time").strftime("%H:%M") if b.get("check_in_time") else "--:--",
+            "check_out": b.get("check_out_time").strftime("%H:%M") if b.get("check_out_time") else "--:--",
+            "status": b["status"],
+            "amount": b["amount"]
+        })
+    
+    return jsonify(details)
+
 @app.route("/admin/dashboard")
 @login_required
 def admin_dashboard():
     if not current_user.is_admin:
         flash("You must be an admin to view this page.", "error")
         return redirect(url_for("index"))
-
-    # --- Global Stats ---
-    pipeline = [
-        {"$match": {"status": {"$in": ["Active", "Confirmed"]}}},
-        {"$group": {"_id": None, "total": {"$sum": "$amount"}}}
-    ]
-    revenue_result = list(mongo.db.bookings.aggregate(pipeline))
-    revenue = revenue_result[0]['total'] if revenue_result else 0
-    today_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
-    new_users_count = mongo.db.users.count_documents({"created_at": {"$gte": today_start}})
 
     areas = list(mongo.db.parking_areas.find({}))
     
@@ -652,10 +781,149 @@ def admin_dashboard():
         manager = mongo.db.users.find_one({"managed_area_id": area["_id"]})
         area["manager_email"] = manager["email"] if manager else "Not Assigned"
 
+    # Fetch Managers
+    managers = list(mongo.db.users.find({"managed_area_id": {"$exists": True, "$ne": None}}))
+    for mgr in managers:
+        area_info = mongo.db.parking_areas.find_one({"_id": mgr["managed_area_id"]})
+        mgr["area_name"] = area_info["name"] if area_info else "Unknown"
+
     return render_template("admin_dashboard.html",
-                           revenue=revenue,
-                           new_users=new_users_count,
-                           areas=areas)
+                           areas=areas,
+                           managers=managers)
+
+@app.route("/admin/analytics")
+@login_required
+def admin_analytics():
+    if not current_user.is_admin:
+        return redirect(url_for("index"))
+
+    # 1. Total Revenue & Bookings
+    pipeline_total = [
+        {"$match": {"status": {"$in": ["Active", "Confirmed", "Completed"]}}},
+        {"$group": {"_id": None, "total_revenue": {"$sum": "$amount"}, "total_bookings": {"$sum": 1}}}
+    ]
+    total_res = list(mongo.db.bookings.aggregate(pipeline_total))
+    total_revenue = total_res[0]['total_revenue'] if total_res else 0
+    total_bookings = total_res[0]['total_bookings'] if total_res else 0
+
+    # 2. Top Areas by Revenue
+    pipeline_area_rev = [
+        {"$match": {"status": {"$in": ["Active", "Confirmed", "Completed"]}}},
+        {"$group": {"_id": "$area_name", "revenue": {"$sum": "$amount"}, "bookings": {"$sum": 1}}},
+        {"$sort": {"revenue": -1}}
+    ]
+    area_stats = list(mongo.db.bookings.aggregate(pipeline_area_rev))
+    top_area_revenue = area_stats[0] if area_stats else {"_id": "N/A", "revenue": 0}
+
+    # 3. Peak Hours (Busy Time)
+    pipeline_hours = [
+        {"$match": {"status": {"$in": ["Active", "Confirmed", "Completed"]}, "start_time": {"$ne": None}}},
+        {"$project": {"hour": {"$hour": "$start_time"}}},
+        {"$group": {"_id": "$hour", "count": {"$sum": 1}}},
+        {"$sort": {"_id": 1}}
+    ]
+    hourly_data_raw = list(mongo.db.bookings.aggregate(pipeline_hours))
+    # Fill missing hours 0-23
+    hourly_data = {h: 0 for h in range(24)}
+    for item in hourly_data_raw:
+        hourly_data[item["_id"]] = item["count"]
+    
+    peak_hour_val = max(hourly_data, key=hourly_data.get) if hourly_data and sum(hourly_data.values()) > 0 else 0
+
+    # 4. Average Booking Duration
+    pipeline_avg_dur = [
+        {"$match": {"status": {"$in": ["Completed"]}}},
+        {"$group": {"_id": None, "avg_duration": {"$avg": "$duration"}}}
+    ]
+    avg_dur_res = list(mongo.db.bookings.aggregate(pipeline_avg_dur))
+    avg_duration = round(avg_dur_res[0]['avg_duration'], 1) if avg_dur_res else 0
+
+    # 5. Top Loyal Users
+    pipeline_users = [
+        {"$match": {"status": {"$in": ["Active", "Confirmed", "Completed"]}}},
+        {"$group": {"_id": "$user_id", "count": {"$sum": 1}, "total_spent": {"$sum": "$amount"}}},
+        {"$sort": {"count": -1}},
+        {"$limit": 5}
+    ]
+    top_users_raw = list(mongo.db.bookings.aggregate(pipeline_users))
+    top_users = []
+    for u in top_users_raw:
+        user_info = mongo.db.users.find_one({"_id": u["_id"]})
+        if user_info:
+            top_users.append({"name": user_info["full_name"], "email": user_info["email"], "count": u["count"], "spent": u["total_spent"]})
+
+    return render_template("admin_analytics.html",
+                           total_revenue=total_revenue,
+                           total_bookings=total_bookings,
+                           area_stats=area_stats,
+                           top_area_revenue=top_area_revenue,
+                           hourly_data=hourly_data,
+                           peak_hour=peak_hour_val,
+                           avg_duration=avg_duration,
+                           top_users=top_users)
+
+@app.route("/admin/create_user", methods=["POST"])
+@login_required
+def admin_create_user():
+    if not current_user.is_admin:
+        return redirect(url_for("index"))
+    
+    full_name = request.form.get("full_name")
+    email = request.form.get("email")
+    password = request.form.get("password")
+    role = request.form.get("role") # 'user', 'manager', 'admin'
+    
+    if mongo.db.users.find_one({"email": email}):
+        flash("Email already exists.", "error")
+        return redirect(url_for("admin_users"))
+        
+    hashed_password = generate_password_hash(password, method='pbkdf2:sha256')
+    
+    user_doc = {
+        "email": email,
+        "full_name": full_name,
+        "password": hashed_password,
+        "is_admin": (role == 'admin'),
+        "created_at": datetime.utcnow(),
+        "vehicle_number": "Not Set",
+        "vehicle_type": "Car"
+    }
+        
+    mongo.db.users.insert_one(user_doc)
+    flash(f"New {role} account created for {email}.", "success")
+    return redirect(url_for("admin_users"))
+
+@app.route("/admin/users")
+@login_required
+def admin_users():
+    if not current_user.is_admin:
+        return redirect(url_for("index"))
+    
+    # Filter out admins and managers (users with managed_area_id)
+    query = {
+        "is_admin": False,
+        "$or": [{"managed_area_id": None}, {"managed_area_id": {"$exists": False}}]
+    }
+    
+    all_users = list(mongo.db.users.find(query).sort("created_at", -1))
+            
+    return render_template("admin_users.html", all_users=all_users)
+
+@app.route("/admin/user/<user_id>")
+@login_required
+def admin_user_details(user_id):
+    if not current_user.is_admin:
+        return redirect(url_for("index"))
+        
+    user = mongo.db.users.find_one({"_id": ObjectId(user_id)})
+    if not user:
+        flash("User not found", "error")
+        return redirect(url_for("admin_users"))
+        
+    # Fetch all bookings for this user
+    bookings = list(mongo.db.bookings.find({"user_id": ObjectId(user_id)}).sort("start_time", -1))
+    
+    return render_template("admin_user_details.html", user=user, bookings=bookings)
 
 @app.route("/admin/area/<area_id>")
 @login_required
@@ -850,10 +1118,36 @@ def verify_booking():
         # Check-out Flow (Exit Token)
         elif booking.get("exit_token") == token:
             if booking["status"] == "Active":
-                mongo.db.bookings.update_one(
-                    {"_id": booking["_id"]},
-                    {"$set": {"status": "Completed", "check_out_time": datetime.utcnow()}}
-                )
+                check_out_time = datetime.utcnow()
+                penalty_amount = 0
+                overdue_hours = 0
+
+                # Check for overstay penalty
+                if check_out_time > booking["end_time"]:
+                    area = mongo.db.parking_areas.find_one({"_id": booking["area_id"]})
+                    base_price = area.get("price", 20)
+                    
+                    hourly_rate = 0
+                    for slot_id in booking.get("slot_ids", []):
+                        if slot_id.startswith('B-'):
+                            hourly_rate += base_price * 0.5
+                        else:
+                            hourly_rate += base_price
+                    
+                    overdue_seconds = (check_out_time - booking["end_time"]).total_seconds()
+                    overdue_hours = math.ceil(overdue_seconds / 3600)
+                    penalty_amount = overdue_hours * hourly_rate * 2
+
+                update_doc = {
+                    "$set": {"status": "Completed", "check_out_time": check_out_time}
+                }
+                if penalty_amount > 0:
+                    update_doc["$set"]["penalty_applied"] = True
+                    update_doc["$set"]["overdue_hours"] = overdue_hours
+                    update_doc["$inc"] = {"amount": penalty_amount}
+
+                mongo.db.bookings.update_one({"_id": booking["_id"]}, update_doc)
+
                 # Release the spot
                 area_update = mongo.db.parking_areas.find_one_and_update(
                     {"_id": booking["area_id"]},
@@ -876,7 +1170,11 @@ def verify_booking():
                     "read": False
                 })
                 socketio.emit('new_notification', room=str(booking["user_id"]))
-                flash(f"Check-out successful for {vehicle}. Slot freed.", "success")
+                
+                if penalty_amount > 0:
+                    flash(f"Check-out successful. Overstayed by {overdue_hours} hr(s). Penalty of ₹{penalty_amount} applied (2x rate).", "warning")
+                else:
+                    flash(f"Check-out successful for {vehicle}. Slot freed.", "success")
             elif booking["status"] in ["Confirmed", "Pending Payment"]:
                 flash("This is an Exit Token. The session has not started yet. Please use the Entry Token to check in.", "warning")
             else:
@@ -944,4 +1242,4 @@ def handle_connect():
         join_room(str(current_user.id))
 
 if __name__ == "__main__":
-    socketio.run(app, debug=True, port=5000)
+    socketio.run(app, debug=True, port=5001)
