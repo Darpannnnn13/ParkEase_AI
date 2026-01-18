@@ -29,7 +29,7 @@ app.config["SECRET_KEY"] = os.getenv("SECRET_KEY")
 
 if not app.config["MONGO_URI"] or not app.config["SECRET_KEY"]:
     # Log error instead of crashing immediately to allow Vercel to boot and show logs
-    print("CRITICAL ERROR: MONGO_URI and SECRET_KEY must be set in Vercel Environment Variables.")
+    print("CRITICAL ERROR: MONGO_URI and SECRET_KEY must be set in Environment Variables.")
 
 # --- Extensions ---
 mongo = PyMongo(app)
