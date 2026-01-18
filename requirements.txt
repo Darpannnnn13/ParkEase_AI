@@ -1,8 +1,7 @@
 Flask
-pymongo[srv]
 Flask-PyMongo
 Flask-Login
-werkzeug
+Flask-SocketIO
 python-dotenv
-flask-socketio
-eventlet
+pymongo[srv]
+dnspython
