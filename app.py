@@ -28,14 +28,15 @@ app.config["MONGO_URI"] = mongo_uri
 app.config["SECRET_KEY"] = os.getenv("SECRET_KEY")
 
 if not app.config["MONGO_URI"] or not app.config["SECRET_KEY"]:
-    raise Exception("MONGO_URI and SECRET_KEY must be set in .env file")
+    # Log error instead of crashing immediately to allow Vercel to boot and show logs
+    print("CRITICAL ERROR: MONGO_URI and SECRET_KEY must be set in Vercel Environment Variables.")
 
 # --- Extensions ---
 mongo = PyMongo(app)
 login_manager = LoginManager()
 login_manager.init_app(app)
 login_manager.login_view = "login_page"
-socketio = SocketIO(app, cors_allowed_origins="*")
+socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading')
 
 # --- User Model ---
 class User(UserMixin):

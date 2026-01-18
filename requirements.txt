@@ -5,3 +5,4 @@ Flask-SocketIO
 python-dotenv
 pymongo[srv]
 dnspython
+werkzeug
