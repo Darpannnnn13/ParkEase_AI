@@ -5,6 +5,7 @@ from pymongo.errors import ConfigurationError
 from werkzeug.security import generate_password_hash
 from dotenv import load_dotenv
 from datetime import datetime, timedelta
+import certifi
 
 # Load environment variables
 load_dotenv()
@@ -15,7 +16,7 @@ if not MONGO_URI:
     print("Warning: MONGO_URI not found in .env, defaulting to localhost.")
     MONGO_URI = "mongodb://localhost:27017/parkease"
 
-client = MongoClient(MONGO_URI)
+client = MongoClient(MONGO_URI, tlsCAFile=certifi.where())
 
 # Atlas connection strings often default to 'test' or 'admin' if the db name isn't in the path.
 # We force the use of 'parkease' if the default db seems generic.

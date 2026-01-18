@@ -9,6 +9,7 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from bson.objectid import ObjectId
 from dotenv import load_dotenv
 from flask_socketio import SocketIO, emit, join_room, leave_room
+import certifi
 
 # --- App Initialization ---
 load_dotenv()
@@ -32,7 +33,7 @@ if not app.config["MONGO_URI"] or not app.config["SECRET_KEY"]:
     print("CRITICAL ERROR: MONGO_URI and SECRET_KEY must be set in Environment Variables.")
 
 # --- Extensions ---
-mongo = PyMongo(app)
+mongo = PyMongo(app, tlsCAFile=certifi.where())
 login_manager = LoginManager()
 login_manager.init_app(app)
 login_manager.login_view = "login_page"
