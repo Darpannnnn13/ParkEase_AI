@@ -16,10 +16,12 @@
             font-family: 'Inter', sans-serif; 
             background: #f0f2f5;
             background-image: 
-                radial-gradient(at 0% 0%, hsla(253,16%,7%,1) 0, transparent 50%), 
-                radial-gradient(at 50% 0%, hsla(225,39%,30%,1) 0, transparent 50%), 
-                radial-gradient(at 100% 0%, hsla(339,49%,30%,1) 0, transparent 50%);
-            background-size: 100% 100vh;
+                radial-gradient(at 0% 0%, hsla(253,16%,7%,1) 0, transparent 50%),
+                radial-gradient(at 50% 0%, hsla(225,39%,30%,1) 0, transparent 50%),
+                radial-gradient(at 100% 0%, hsla(339,49%,30%,1) 0, transparent 50%),
+                linear-gradient(to bottom right, #0f172a, #1e1b4b);
+            background-size: 200% 200%;
+            animation: gradientBG 15s ease infinite;
             background-repeat: no-repeat;
             background-attachment: fixed;
             min-height: 100vh;
@@ -28,10 +30,11 @@
         
         /* Glassmorphism Utility */
         .glass {
-            background: rgba(255, 255, 255, 0.85);
-            backdrop-filter: blur(12px);
-            -webkit-backdrop-filter: blur(12px);
-            border: 1px solid rgba(255, 255, 255, 0.3);
+            background: rgba(255, 255, 255, 0.75);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.4);
+            box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.15);
         }
         
         .glass-dark {
@@ -48,6 +51,12 @@
         @keyframes pulse {
             0%, 100% { opacity: 1; }
             50% { opacity: .7; }
+        }
+
+        @keyframes gradientBG {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
         }
         
         /* Custom Scrollbar */
@@ -69,11 +78,11 @@
                         dark: '#0f172a',
                     },
                     animation: {
-                        'slide-up': 'slideUp 0.6s cubic-bezier(0.16, 1, 0.3, 1)',
+                        'slide-up': 'slideUp 0.5s ease-out forwards',
                     },
                     keyframes: {
                         slideUp: {
-                            '0%': { transform: 'translateY(20px)', opacity: '0' },
+                            '0%': { transform: 'translateY(30px)', opacity: '0' },
                             '100%': { transform: 'translateY(0)', opacity: '1' },
                         }
                     }
@@ -113,6 +122,8 @@
                                 {% else %}
                                     <a href="{{ url_for('user_dashboard') }}" class="text-gray-300 hover:text-white hover:bg-white/10 px-3 py-2 rounded-md text-sm font-medium transition-all">My Bookings</a>
                                     <a href="{{ url_for('user_dashboard') }}#find-my-vehicle" class="text-gray-300 hover:text-white hover:bg-white/10 px-3 py-2 rounded-md text-sm font-medium transition-all"><i class="fas fa-car-side mr-1"></i>Find My Vehicle</a>
+                                    <a href="{{ url_for('wallet') }}" class="text-gray-300 hover:text-white hover:bg-white/10 px-3 py-2 rounded-md text-sm font-medium transition-all">Wallet</a>
+                                    <a href="{{ url_for('support') }}" class="text-gray-300 hover:text-white hover:bg-white/10 px-3 py-2 rounded-md text-sm font-medium transition-all">Support</a>
                                 {% endif %}
                                 <!-- Profile Dropdown -->
                                 <div class="relative ml-3">
@@ -183,6 +194,8 @@
                             <a href="{{ url_for('profile') }}" class="text-gray-300 hover:text-white block px-3 py-2 rounded-md text-base font-medium">My Profile</a>
                             <a href="{{ url_for('user_dashboard') }}" class="text-gray-300 hover:text-white block px-3 py-2 rounded-md text-base font-medium">My Bookings</a>
                             <a href="{{ url_for('user_dashboard') }}#find-my-vehicle" class="text-gray-300 hover:text-white block px-3 py-2 rounded-md text-base font-medium">Find My Vehicle</a>
+                            <a href="{{ url_for('wallet') }}" class="text-gray-300 hover:text-white block px-3 py-2 rounded-md text-base font-medium">Wallet / Offers</a>
+                            <a href="{{ url_for('support') }}" class="text-gray-300 hover:text-white block px-3 py-2 rounded-md text-base font-medium">Support</a>
                             <a href="{{ url_for('notifications_page') }}" class="text-gray-300 hover:text-white block px-3 py-2 rounded-md text-base font-medium flex items-center">
                                 Notifications
                                 {% if notification_count > 0 %}

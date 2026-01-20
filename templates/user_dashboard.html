@@ -11,7 +11,7 @@
         <!-- Left Column: Profile and Car -->
         <div class="lg:col-span-1 space-y-8">
             <!-- Profile Card -->
-            <div class="glass p-4 sm:p-6 rounded-2xl shadow-xl relative overflow-hidden group">
+            <div class="glass p-4 sm:p-6 rounded-2xl shadow-xl relative overflow-hidden group hover:shadow-2xl transition-all duration-300">
                 <div class="absolute top-0 right-0 -mt-4 -mr-4 w-24 h-24 bg-gradient-to-br from-primary to-purple-600 rounded-full opacity-20 group-hover:scale-150 transition-transform duration-500"></div>
                 <h2 class="text-xl font-bold mb-6 flex items-center text-gray-800"><i class="fas fa-id-card mr-3 text-primary"></i>My Profile</h2>
                 <div class="space-y-4">
@@ -34,7 +34,7 @@
             </div>
 
             <!-- Find My Vehicle Card -->
-            <div id="find-my-vehicle" class="glass p-4 sm:p-6 rounded-2xl shadow-xl border-l-4 border-secondary">
+            <div id="find-my-vehicle" class="glass p-4 sm:p-6 rounded-2xl shadow-xl border-l-4 border-secondary hover:shadow-2xl transition-all duration-300">
                 <h2 class="text-xl font-bold mb-4 flex items-center text-gray-800">
                     {% if current_user.vehicle_type == 'Bike' %}
                     <i class="fas fa-motorcycle mr-3 text-secondary"></i>Find My Bike
@@ -77,7 +77,7 @@
             <h2 class="text-2xl font-bold mb-6 text-gray-800 flex items-center"><i class="fas fa-history mr-3 text-primary"></i>My Bookings</h2>
             <div class="overflow-x-auto rounded-xl border border-gray-200 shadow-sm">
                 <table class="min-w-full text-sm text-left text-gray-500">
-                    <thead class="text-xs text-gray-700 uppercase bg-gray-100/80 backdrop-blur">
+                    <thead class="text-xs text-gray-700 uppercase bg-gray-50/80 backdrop-blur border-b border-gray-200">
                     <tr>
                         <th scope="col" class="px-6 py-3">Time Window</th>
                         <th scope="col" class="px-6 py-3">Token</th>
@@ -89,7 +89,7 @@
                 </thead>
                 <tbody>
                     {% for booking in bookings %}
-                    <tr class="bg-white/60 border-b hover:bg-white hover:shadow-sm transition-all duration-200 transform hover:scale-[1.01]">
+                    <tr class="bg-white/40 border-b border-gray-100 hover:bg-white/90 hover:shadow-md transition-all duration-200">
                         <th scope="row" class="px-6 py-4 font-medium text-gray-900">
                             <div>{{ booking.start_time.strftime('%b %d, %H:%M') }} - {{ booking.end_time.strftime('%H:%M') }}</div>
                             <div class="text-xs text-gray-500 font-normal mt-1"><i class="fas fa-hourglass-half mr-1"></i>{{ booking.duration }} Hr{% if booking.duration > 1 %}s{% endif %}</div>
@@ -99,16 +99,34 @@
                                 <div class="flex flex-col">
                                     <span class="text-[10px] text-gray-500 uppercase font-bold">Total Paid</span>
                                     <span class="font-mono font-bold text-green-600 bg-green-50 px-2 py-1 rounded border border-green-200">₹{{ "%.2f"|format(booking.amount) }}</span>
+                                    <a href="{{ url_for('invoice', booking_id=booking._id) }}" class="text-[10px] text-blue-600 hover:underline mt-1">
+                                        <i class="fas fa-file-invoice mr-1"></i>Invoice
+                                    </a>
                                 </div>
                             {% elif booking.status == 'Active' %}
                                 <div class="flex flex-col">
                                     <span class="text-[10px] text-gray-500 uppercase font-bold">Exit Token</span>
                                     <span class="font-mono font-bold text-red-600 bg-red-50 px-2 py-1 rounded border border-red-200">{{ booking.exit_token }}</span>
                                 </div>
-                            {% else %}
+                            {% elif booking.status == 'Confirmed' %}
                                 <div class="flex flex-col">
                                     <span class="text-[10px] text-gray-500 uppercase font-bold">Entry Token</span>
                                     <span class="font-mono font-bold text-gray-800 bg-gray-100 px-2 py-1 rounded border border-gray-300">{{ booking.booking_token }}</span>
+                                </div>
+                            {% elif booking.status == 'Pending Payment' %}
+                                <div class="flex flex-col">
+                                    <span class="text-[10px] text-gray-500 uppercase font-bold">Entry Token</span>
+                                    <span class="font-mono font-bold text-gray-400 bg-gray-50 px-2 py-1 rounded border border-gray-200 italic text-xs">Pay to Reveal</span>
+                                </div>
+                            {% elif 'Cancelled' in booking.status %}
+                                <div class="flex flex-col">
+                                    <span class="text-[10px] text-gray-500 uppercase font-bold">Token</span>
+                                    <span class="font-mono font-bold text-red-400 bg-red-50 px-2 py-1 rounded border border-red-100 text-xs">Cancelled</span>
+                                </div>
+                            {% else %}
+                                <div class="flex flex-col">
+                                    <span class="text-[10px] text-gray-500 uppercase font-bold">Token</span>
+                                    <span class="font-mono font-bold text-gray-400 bg-gray-50 px-2 py-1 rounded border border-gray-200 text-xs">--</span>
                                 </div>
                             {% endif %}
                         </td>
@@ -120,9 +138,7 @@
                         <td class="px-6 py-4">
                             <div class="flex items-center space-x-2">
                                 {% if booking.status == 'Pending Payment' %}
-                                <form action="{{ url_for('pay_booking', booking_id=booking._id) }}" method="POST">
-                                    <button type="submit" class="text-xs bg-primary text-white px-3 py-1 rounded hover:bg-indigo-700 transition">Pay ₹{{ "%.2f"|format(booking.amount) }}</button>
-                                </form>
+                                <a href="{{ url_for('payment_page', booking_id=booking._id) }}" class="text-xs bg-primary text-white px-3 py-1 rounded hover:bg-indigo-700 transition inline-block text-center shadow-sm">Pay ₹{{ "%.2f"|format(booking.amount) }}</a>
                                 {% elif booking.status == 'Active' %}
                                 <form action="{{ url_for('extend_booking', booking_id=booking._id) }}" method="POST" class="flex items-center space-x-1">
                                     <select name="hours" class="text-xs border border-gray-300 rounded px-1 py-0.5 bg-white focus:outline-none focus:ring-1 focus:ring-primary">

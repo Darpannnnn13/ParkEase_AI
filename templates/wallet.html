@@ -1,0 +1,216 @@
+{% extends "base.html" %}
+
+{% block title %}Wallet & Offers - ParkEase{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto animate-slide-up">
+    <div class="mb-4">
+        <a href="{{ url_for('user_dashboard') }}" class="inline-flex items-center text-white/80 hover:text-white transition-colors bg-white/10 px-4 py-2 rounded-lg backdrop-blur-sm">
+            <i class="fas fa-arrow-left mr-2"></i> Back to Dashboard
+        </a>
+    </div>
+    <h1 class="text-3xl font-bold text-white mb-8 drop-shadow-md text-center">Wallet & Offers</h1>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+        
+        <!-- Wallet Card -->
+        <div class="glass p-6 rounded-2xl shadow-xl">
+            <div class="flex justify-between items-start mb-6">
+                <div>
+                    <h2 class="text-xl font-bold text-gray-800">ParkEase Wallet</h2>
+                    <p class="text-sm text-gray-500">Secure payments & instant refunds</p>
+                </div>
+                <div class="bg-blue-100 p-3 rounded-full text-secondary">
+                    <i class="fas fa-wallet text-2xl"></i>
+                </div>
+            </div>
+            
+            <!-- Credit Card UI -->
+            <div class="bg-gradient-to-br from-gray-900 via-gray-800 to-black rounded-2xl p-6 text-white shadow-2xl mb-8 relative overflow-hidden transform hover:scale-[1.02] transition-transform duration-300">
+                <div class="absolute top-0 right-0 -mt-8 -mr-8 w-32 h-32 bg-white opacity-5 rounded-full blur-xl"></div>
+                <div class="absolute bottom-0 left-0 -mb-8 -ml-8 w-32 h-32 bg-indigo-500 opacity-10 rounded-full blur-xl"></div>
+                <div class="flex justify-between items-center mb-8">
+                    <i class="fas fa-wifi text-gray-500 rotate-90"></i>
+                    <span class="font-mono text-sm tracking-widest opacity-70">PARKEASE</span>
+                </div>
+                <p class="text-gray-400 text-xs uppercase tracking-wider mb-1">Available Balance</p>
+                <div class="text-4xl font-bold mb-6 tracking-tight">₹{{ "%.2f"|format(current_user.wallet_balance) }}</div>
+                <div class="flex justify-between items-end">
+                    <div>
+                        <p class="text-[10px] text-gray-400 uppercase">Card Holder</p>
+                        <p class="font-medium tracking-wide uppercase text-sm">{{ current_user.full_name }}</p>
+                    </div>
+                    <div class="flex space-x-2">
+                        <button onclick="openTopupModal()" class="bg-white/10 hover:bg-white/20 border border-white/20 px-3 py-1.5 rounded-lg text-xs font-medium transition backdrop-blur-sm">Add Money</button>
+                    </div>
+                </div>
+            </div>
+
+            <h3 class="font-bold text-gray-800 mb-3 text-sm uppercase">Recent Refunds</h3>
+            <div class="space-y-3 max-h-48 overflow-y-auto pr-2">
+                {% for refund in refunds %}
+                <div class="flex justify-between items-center p-3 bg-white/40 rounded-lg border border-white/50 hover:bg-white/60 transition-colors">
+                    <div>
+                        <p class="text-sm font-bold text-gray-800">Refund: {{ refund.area_name }}</p>
+                        <p class="text-xs text-gray-500">{{ refund.created_at.strftime('%Y-%m-%d') }}</p>
+                    </div>
+                    <span class="text-green-600 font-bold">+ ₹{{ "%.2f"|format(refund.refund_amount) }}</span>
+                </div>
+                {% else %}
+                <p class="text-gray-500 text-sm text-center py-2">No recent refunds.</p>
+                {% endfor %}
+            </div>
+        </div>
+
+        <!-- Loyalty & Offers -->
+        <div class="space-y-8">
+            <!-- Loyalty Points -->
+            <div class="glass p-6 rounded-2xl shadow-xl border-t-4 border-yellow-500">
+                <div class="flex justify-between items-center mb-4">
+                    <h2 class="text-xl font-bold text-gray-800">Loyalty Points</h2>
+                    <i class="fas fa-crown text-yellow-500 text-2xl"></i>
+                </div>
+                <div class="flex items-center space-x-4">
+                    <div class="text-4xl font-bold text-gray-800">{{ current_user.loyalty_points }}</div>
+                    <div class="text-sm text-gray-600">
+                        <p>Points earned</p>
+                        <p class="text-xs text-gray-400">100 pts = ₹10 Discount</p>
+                    </div>
+                </div>
+                <div class="mt-4 w-full bg-gray-200 rounded-full h-2">
+                    <div class="bg-yellow-500 h-2 rounded-full" style="width: {{ (current_user.loyalty_points % 100) }}%"></div>
+                </div>
+                <p class="text-xs text-gray-500 mt-1 text-right">{{ 100 - (current_user.loyalty_points % 100) }} pts to next reward</p>
+            </div>
+
+            <!-- Active Offers -->
+            <div class="glass p-6 rounded-2xl shadow-xl">
+                <h2 class="text-xl font-bold text-gray-800 mb-4"><i class="fas fa-tags mr-2 text-primary"></i>Active Offers</h2>
+                <div class="space-y-3">
+                    <div class="border-l-4 border-green-500 bg-green-50 p-3 rounded-r-lg">
+                        <p class="font-bold text-green-800 text-sm">FIRST50</p>
+                        <p class="text-xs text-green-600">Get 50% off on your first booking.</p>
+                    </div>
+                    <div class="border-l-4 border-blue-500 bg-blue-50 p-3 rounded-r-lg">
+                        <p class="font-bold text-blue-800 text-sm">WEEKEND20</p>
+                        <p class="text-xs text-blue-600">Flat 20% off on weekend parking.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Add Money Modal -->
+<div id="topup-modal" class="fixed inset-0 z-50 hidden overflow-y-auto" aria-labelledby="modal-title" role="dialog" aria-modal="true">
+    <div class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
+        <div class="fixed inset-0 bg-gray-900 bg-opacity-75 transition-opacity" aria-hidden="true" onclick="closeTopupModal()"></div>
+        <span class="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
+        <div class="inline-block align-bottom bg-white rounded-2xl text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-md sm:w-full">
+            <div class="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
+                <h3 class="text-lg leading-6 font-bold text-gray-900 mb-4">Add Money to Wallet</h3>
+                
+                <div class="mb-4">
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Amount (₹)</label>
+                    <input type="number" id="topup-amount" min="50" value="100" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary focus:border-primary">
+                    <p class="text-xs text-gray-500 mt-1">Minimum amount: ₹50</p>
+                </div>
+
+                <div id="stripe-element-container" class="hidden">
+                    <div id="payment-element" class="min-h-[200px] mb-4"></div>
+                    <div id="error-message" class="text-red-500 text-sm mb-2 hidden"></div>
+                </div>
+
+                <button id="init-payment-btn" onclick="initializeStripe()" class="w-full bg-primary text-white font-bold py-2 rounded-lg hover:bg-indigo-700 transition">Proceed to Pay</button>
+                <button id="confirm-payment-btn" class="w-full bg-green-600 text-white font-bold py-2 rounded-lg hover:bg-green-700 transition hidden">Pay Now</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://js.stripe.com/v3/"></script>
+<script>
+    let stripe, elements;
+
+    function openTopupModal() {
+        document.getElementById('topup-modal').classList.remove('hidden');
+    }
+
+    function closeTopupModal() {
+        document.getElementById('topup-modal').classList.add('hidden');
+        // Reset state
+        document.getElementById('stripe-element-container').classList.add('hidden');
+        document.getElementById('init-payment-btn').classList.remove('hidden');
+        document.getElementById('confirm-payment-btn').classList.add('hidden');
+    }
+
+    async function initializeStripe() {
+        const amount = document.getElementById('topup-amount').value;
+        if (amount < 50) {
+            alert("Minimum amount is ₹50");
+            return;
+        }
+
+        const btn = document.getElementById('init-payment-btn');
+        btn.disabled = true;
+        btn.innerText = "Loading...";
+
+        try {
+            const response = await fetch('/create-topup-intent', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ amount: amount })
+            });
+            const data = await response.json();
+
+            if (data.error) {
+                alert(data.error);
+                btn.disabled = false;
+                btn.innerText = "Proceed to Pay";
+                return;
+            }
+
+            stripe = Stripe(data.publicKey);
+            elements = stripe.elements({ clientSecret: data.clientSecret, appearance: { theme: 'stripe' } });
+            const paymentElement = elements.create('payment');
+            paymentElement.mount('#payment-element');
+
+            document.getElementById('stripe-element-container').classList.remove('hidden');
+            btn.classList.add('hidden');
+            const confirmBtn = document.getElementById('confirm-payment-btn');
+            confirmBtn.classList.remove('hidden');
+            
+            confirmBtn.onclick = async () => {
+                confirmBtn.disabled = true;
+                confirmBtn.innerText = "Processing...";
+                
+                const { paymentIntent, error } = await stripe.confirmPayment({
+                    elements,
+                    redirect: 'if_required'
+                });
+
+                if (error) {
+                    document.getElementById('error-message').innerText = error.message;
+                    document.getElementById('error-message').classList.remove('hidden');
+                    confirmBtn.disabled = false;
+                    confirmBtn.innerText = "Pay Now";
+                } else if (paymentIntent && paymentIntent.status === 'succeeded') {
+                    // Confirm on server
+                    await fetch('/confirm_topup', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ payment_intent_id: paymentIntent.id })
+                    });
+                    window.location.reload();
+                }
+            };
+
+        } catch (e) {
+            console.error(e);
+            alert("Something went wrong.");
+            btn.disabled = false;
+            btn.innerText = "Proceed to Pay";
+        }
+    }
+</script>
+{% endblock %}

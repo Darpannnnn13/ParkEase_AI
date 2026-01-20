@@ -10,6 +10,7 @@ from bson.objectid import ObjectId
 from dotenv import load_dotenv
 from flask_socketio import SocketIO, emit, join_room, leave_room
 import certifi
+import stripe
 
 # --- App Initialization ---
 load_dotenv()
@@ -32,6 +33,17 @@ if not app.config["MONGO_URI"] or not app.config["SECRET_KEY"]:
     # Log error instead of crashing immediately to allow Vercel to boot and show logs
     print("CRITICAL ERROR: MONGO_URI and SECRET_KEY must be set in Environment Variables.")
 
+# Stripe Configuration
+stripe.api_key = os.getenv("STRIPE_SECRET_KEY")
+
+# Mock Coupons
+COUPONS = {
+    "FIRST50": {"type": "percent", "value": 50},
+    "SAVE20": {"type": "percent", "value": 20},
+    "PARKEASE10": {"type": "percent", "value": 10},
+    "FLAT50": {"type": "flat", "value": 50}
+}
+
 # --- Extensions ---
 mongo = PyMongo(app, tlsCAFile=certifi.where())
 login_manager = LoginManager()
@@ -51,6 +63,8 @@ class User(UserMixin):
         self.is_ev = user_data.get("is_ev", False)
         self.accessibility = user_data.get("accessibility", False)
         self.managed_area_id = str(user_data.get("managed_area_id")) if user_data.get("managed_area_id") else None
+        self.wallet_balance = user_data.get("wallet_balance", 0.0)
+        self.loyalty_points = user_data.get("loyalty_points", 0)
 
 @login_manager.user_loader
 def load_user(user_id):
@@ -124,6 +138,53 @@ def check_no_shows(area_id=None):
                 'capacity': area_update["capacity"]
             })
 
+def check_payment_expiry(area_id=None):
+    """Cancels bookings that remain 'Pending Payment' for more than 15 minutes."""
+    now = datetime.utcnow()
+    expiry_threshold = now - timedelta(minutes=15)
+    
+    query = {
+        "status": "Pending Payment",
+        "created_at": {"$lt": expiry_threshold}
+    }
+    if area_id:
+        query["area_id"] = area_id
+        
+    expired_bookings = list(mongo.db.bookings.find(query))
+    
+    for booking in expired_bookings:
+        mongo.db.bookings.update_one(
+            {"_id": booking["_id"]},
+            {
+                "$set": {
+                    "status": "Cancelled (Payment Timeout)",
+                    "cancellation_reason": "Payment not received within 15 minutes"
+                }
+            }
+        )
+        
+        spots = booking.get("spots", 1)
+        area_update = mongo.db.parking_areas.find_one_and_update(
+            {"_id": booking["area_id"]},
+            {"$inc": {"occupied": -spots}},
+            return_document=True
+        )
+        
+        if area_update:
+            socketio.emit('update_availability', {
+                'area_id': str(area_update["_id"]),
+                'occupied': area_update["occupied"],
+                'capacity': area_update["capacity"]
+            })
+            
+        mongo.db.notifications.insert_one({
+            "user_id": booking["user_id"],
+            "message": f"⚠️ Booking at {booking['area_name']} cancelled due to payment timeout.",
+            "timestamp": datetime.utcnow(),
+            "read": False
+        })
+        socketio.emit('new_notification', room=str(booking["user_id"]))
+
 def check_expiry_reminders():
     """Checks for active bookings ending soon (within 15 mins) and sends alerts."""
     now = datetime.utcnow()
@@ -148,13 +209,27 @@ def check_expiry_reminders():
 
 def cleanup_locks():
     """Removes expired slot locks."""
-    mongo.db.slot_locks.delete_many({"expires_at": {"$lt": datetime.utcnow()}})
+    now = datetime.utcnow()
+    expired_locks = list(mongo.db.slot_locks.find({"expires_at": {"$lt": now}}))
+    
+    if expired_locks:
+        for lock in expired_locks:
+            mongo.db.notifications.insert_one({
+                "user_id": lock["user_id"],
+                "message": f"⚠️ Slot {lock['slot_number']} selection expired due to inactivity.",
+                "timestamp": now,
+                "read": False
+            })
+            socketio.emit('new_notification', room=str(lock["user_id"]))
+            
+        mongo.db.slot_locks.delete_many({"expires_at": {"$lt": now}})
 
 # --- Page Routes ---
 
 @app.route("/")
 def index():
     check_no_shows()
+    check_payment_expiry()
     check_expiry_reminders()
     areas = list(mongo.db.parking_areas.find({}, {"name": 1}))
     return render_template("index.html", areas=areas)
@@ -222,6 +297,7 @@ def user_dashboard():
         return redirect(url_for('admin_dashboard'))
     
     check_no_shows()
+    check_payment_expiry()
     check_expiry_reminders()
     bookings = list(mongo.db.bookings.find({"user_id": ObjectId(current_user.id)}).sort("start_time", -1))
     
@@ -388,10 +464,153 @@ def book_spot():
     flash("Note: A 10% fee applies if you cancel after payment is confirmed.", "info")
     return redirect(url_for("user_dashboard"))
 
-@app.route("/pay/<booking_id>", methods=["POST"])
+@app.route("/payment/<booking_id>")
 @login_required
-def pay_booking(booking_id):
+def payment_page(booking_id):
+    booking = mongo.db.bookings.find_one({"_id": ObjectId(booking_id), "user_id": ObjectId(current_user.id)})
+    if not booking or booking['status'] != 'Pending Payment':
+        flash("Invalid booking or already paid.", "error")
+        return redirect(url_for("user_dashboard"))
+    return render_template("payment.html", booking=booking, coupons=COUPONS)
+
+@app.route("/create-payment-intent/<booking_id>", methods=["POST"])
+@login_required
+def create_payment_intent(booking_id):
+    booking = mongo.db.bookings.find_one({"_id": ObjectId(booking_id), "user_id": ObjectId(current_user.id)})
+    if not booking:
+        return jsonify({"error": "Booking not found"}), 404
+        
+    data = request.get_json() or {}
+    coupon_code = str(data.get("coupon_code") or "").upper()
+    amount = booking['amount']
+    
+    if coupon_code and coupon_code in COUPONS:
+        coupon = COUPONS[coupon_code]
+        discount = 0
+        if coupon["type"] == "percent":
+            discount = amount * (coupon["value"] / 100)
+        else:
+            discount = coupon["value"]
+        if discount > amount: discount = amount
+        amount = amount - discount
+
+    try:
+        # Create a PaymentIntent with the order amount and currency
+        intent = stripe.PaymentIntent.create(
+            amount=int(amount * 100), # Amount in cents/paise
+            currency='inr',
+            metadata={'booking_id': str(booking_id), 'user_id': str(current_user.id), 'coupon': coupon_code},
+            automatic_payment_methods={'enabled': True}
+        )
+        return jsonify({'clientSecret': intent.client_secret, 'publicKey': os.getenv("STRIPE_PUBLIC_KEY")})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 403
+
+@app.route("/create-topup-intent", methods=["POST"])
+@login_required
+def create_topup_intent():
+    data = request.get_json()
+    try:
+        amount = float(data.get("amount", 0))
+    except:
+        return jsonify({"error": "Invalid amount"}), 400
+        
+    if amount < 50:
+        return jsonify({"error": "Minimum amount is ₹50"}), 400
+        
+    try:
+        intent = stripe.PaymentIntent.create(
+            amount=int(amount * 100),
+            currency='inr',
+            metadata={'user_id': str(current_user.id), 'type': 'wallet_topup'},
+            automatic_payment_methods={'enabled': True}
+        )
+        return jsonify({'clientSecret': intent.client_secret, 'publicKey': os.getenv("STRIPE_PUBLIC_KEY")})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 403
+
+@app.route("/confirm_topup", methods=["POST"])
+@login_required
+def confirm_topup():
+    data = request.get_json()
+    payment_intent_id = data.get("payment_intent_id")
+    
+    try:
+        intent = stripe.PaymentIntent.retrieve(payment_intent_id)
+        if intent.status == 'succeeded' and intent.metadata.get('user_id') == str(current_user.id):
+            amount_received = intent.amount / 100.0
+            
+            # Check if this intent was already processed (optional idempotency check could go here)
+            # For now, we rely on the fact that we only call this on client success
+            
+            mongo.db.users.update_one(
+                {"_id": ObjectId(current_user.id)},
+                {"$inc": {"wallet_balance": amount_received}}
+            )
+            
+            mongo.db.notifications.insert_one({
+                "user_id": ObjectId(current_user.id),
+                "message": f"💰 Wallet Top-up Successful! Added ₹{amount_received}.",
+                "timestamp": datetime.utcnow(),
+                "read": False
+            })
+            socketio.emit('new_notification', room=str(current_user.id))
+            
+            return jsonify({"status": "success"})
+        return jsonify({"error": "Payment not successful"}), 400
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/process_payment/<booking_id>", methods=["GET", "POST"])
+@login_required
+def process_payment(booking_id):
     """Confirm payment. Preserves the user-selected slot_ids."""
+    
+    # Handle Stripe Redirect Flow (GET request with payment_intent)
+    if request.method == "GET":
+        payment_intent_id = request.args.get("payment_intent")
+        if payment_intent_id:
+            try:
+                intent = stripe.PaymentIntent.retrieve(payment_intent_id)
+                if intent.status != 'succeeded':
+                    flash("Payment failed or was cancelled.", "error")
+                    return redirect(url_for("user_dashboard"))
+                # If succeeded, proceed to confirm booking below
+            except Exception as e:
+                flash(f"Payment verification failed: {str(e)}", "error")
+                return redirect(url_for("user_dashboard"))
+        else:
+            # Direct access without intent is not allowed for confirmation
+            return redirect(url_for("user_dashboard"))
+
+    # Handle Wallet Payment (POST with JSON)
+    if request.method == "POST" and request.is_json:
+        data = request.get_json()
+        if data.get("method") == "wallet":
+            booking_check = mongo.db.bookings.find_one({"_id": ObjectId(booking_id)})
+            if not booking_check: return jsonify({"error": "Booking not found"}), 404
+            
+            amount_to_deduct = booking_check['amount']
+            coupon_code = str(data.get("coupon_code") or "").upper()
+            
+            if coupon_code and coupon_code in COUPONS:
+                coupon = COUPONS[coupon_code]
+                discount = 0
+                if coupon["type"] == "percent":
+                    discount = amount_to_deduct * (coupon["value"] / 100)
+                else:
+                    discount = coupon["value"]
+                if discount > amount_to_deduct: discount = amount_to_deduct
+                amount_to_deduct = amount_to_deduct - discount
+            
+            if current_user.wallet_balance >= amount_to_deduct:
+                mongo.db.users.update_one(
+                    {"_id": ObjectId(current_user.id)},
+                    {"$inc": {"wallet_balance": -amount_to_deduct}}
+                )
+            else:
+                return jsonify({"error": "Insufficient wallet balance"}), 400
+
     booking = mongo.db.bookings.find_one_and_update(
         {"_id": ObjectId(booking_id), "user_id": ObjectId(current_user.id)},
         {"$set": {"status": "Confirmed"}},
@@ -401,11 +620,14 @@ def pay_booking(booking_id):
     if booking:
         mongo.db.notifications.insert_one({
             "user_id": ObjectId(current_user.id),
-            "message": f"✅ Booking Confirmed! You have reserved spots at {booking['area_name']}.",
+            "message": f"✅ Booking Confirmed! Your spot is reserved.",
             "timestamp": datetime.utcnow(),
             "read": False
         })
         socketio.emit('new_notification', room=str(current_user.id))
+
+    if request.is_json:
+        return jsonify({"status": "success", "message": "Payment successful!", "redirect_url": url_for("user_dashboard")})
 
     flash("Payment successful! Your spots are now secured.", "success")
     return redirect(url_for("user_dashboard"))
@@ -434,6 +656,18 @@ def cancel_booking(booking_id):
         amount = booking.get("amount", 0)
         refund = amount * 0.90
         
+        # Refund to Wallet
+        mongo.db.users.update_one(
+            {"_id": ObjectId(current_user.id)},
+            {"$inc": {"wallet_balance": refund}}
+        )
+        
+        # Deduct Loyalty Points (Penalty for cancellation)
+        mongo.db.users.update_one(
+            {"_id": ObjectId(current_user.id), "loyalty_points": {"$gte": 5}},
+            {"$inc": {"loyalty_points": -5}}
+        )
+
         mongo.db.bookings.update_one(
             {"_id": booking["_id"]},
             {"$set": {
@@ -446,7 +680,7 @@ def cancel_booking(booking_id):
             {"_id": booking["area_id"]},
             {"$inc": {"occupied": -booking.get('spots', 1)}}
         )
-        flash(f"Booking canceled. A 10% fee was applied. ₹{round(refund, 2)} will be refunded.", "info")
+        flash(f"Booking canceled. ₹{round(refund, 2)} has been refunded to your wallet.", "info")
     
     else:
         flash(f"Cannot cancel booking with status '{booking['status']}'.", "error")
@@ -509,6 +743,82 @@ def extend_booking(booking_id):
         flash(f"Could not extend booking: {e}", "error")
 
     return redirect(url_for("user_dashboard"))
+
+# --- Module 5: Payments, Wallet & Support ---
+
+@app.route("/wallet")
+@login_required
+def wallet():
+    # Fetch refund transactions from bookings
+    refunds = list(mongo.db.bookings.find(
+        {"user_id": ObjectId(current_user.id), "refund_amount": {"$gt": 0}}
+    ).sort("start_time", -1))
+    return render_template("wallet.html", refunds=refunds)
+
+@app.route("/api/validate_coupon", methods=["POST"])
+@login_required
+def validate_coupon():
+    data = request.get_json()
+    code = str(data.get("code") or "").upper()
+    booking_id = data.get("booking_id")
+    
+    booking = mongo.db.bookings.find_one({"_id": ObjectId(booking_id), "user_id": ObjectId(current_user.id)})
+    if not booking:
+        return jsonify({"valid": False, "message": "Booking not found"})
+
+    if code in COUPONS:
+        coupon = COUPONS[code]
+        original_amount = booking['amount']
+        discount = 0
+        
+        if coupon["type"] == "percent":
+            discount = original_amount * (coupon["value"] / 100)
+        else:
+            discount = coupon["value"]
+            
+        # Ensure discount doesn't exceed amount
+        if discount > original_amount:
+            discount = original_amount
+            
+        final_amount = original_amount - discount
+        
+        return jsonify({
+            "valid": True,
+            "discount": round(discount, 2),
+            "new_total": round(final_amount, 2),
+            "message": f"Coupon applied! You saved ₹{round(discount, 2)}"
+        })
+    
+    return jsonify({"valid": False, "message": "Invalid coupon code"})
+
+@app.route("/support", methods=["GET", "POST"])
+@login_required
+def support():
+    if request.method == "POST":
+        subject = request.form.get("subject")
+        message = request.form.get("message")
+        mongo.db.support_tickets.insert_one({
+            "user_id": ObjectId(current_user.id),
+            "subject": subject,
+            "message": message,
+            "status": "Open",
+            "created_at": datetime.utcnow()
+        })
+        flash("Support ticket submitted successfully. We will contact you soon.", "success")
+        return redirect(url_for("support"))
+    
+    tickets = list(mongo.db.support_tickets.find({"user_id": ObjectId(current_user.id)}).sort("created_at", -1))
+    return render_template("support.html", tickets=tickets)
+
+@app.route("/invoice/<booking_id>")
+@login_required
+def invoice(booking_id):
+    booking = mongo.db.bookings.find_one({"_id": ObjectId(booking_id), "user_id": ObjectId(current_user.id)})
+    if not booking:
+        flash("Invoice not found.", "error")
+        return redirect(url_for("user_dashboard"))
+    
+    return render_template("invoice.html", booking=booking)
 
 # --- API & Admin Routes ---
 
@@ -622,8 +932,21 @@ def lock_slot():
         "slot_number": slot_number
     })
     
-    if existing_lock and existing_lock["user_id"] != ObjectId(current_user.id):
-        return jsonify({"status": "error", "message": "Slot is currently locked by another user."}), 409
+    if existing_lock:
+        if existing_lock["user_id"] != ObjectId(current_user.id):
+            return jsonify({"status": "error", "message": "Slot is currently locked by another user."}), 409
+    else:
+        # New lock attempt - Check limit (Max 10 slots)
+        current_lock_count = mongo.db.slot_locks.count_documents({"user_id": ObjectId(current_user.id)})
+        if current_lock_count >= 10:
+            mongo.db.notifications.insert_one({
+                "user_id": ObjectId(current_user.id),
+                "message": "⚠️ Warning: You are locking too many slots! Please complete your booking.",
+                "timestamp": datetime.utcnow(),
+                "read": False
+            })
+            socketio.emit('new_notification', room=str(current_user.id))
+            return jsonify({"status": "error", "message": "Limit reached: You cannot lock more than 10 slots."}), 400
 
     # Create or Update Lock (Extend expiry)
     mongo.db.slot_locks.update_one(
@@ -665,6 +988,7 @@ def manager_dashboard():
         return redirect(url_for("index"))
 
     check_no_shows(area_id)
+    check_payment_expiry(area_id)
 
     # --- Booking Lists ---
     requested_bookings = list(mongo.db.bookings.find({"area_id": area_id, "status": "Confirmed"}).sort("start_time", 1))
@@ -1007,6 +1331,7 @@ def trigger_no_show_check():
         return redirect(url_for('index'))
     
     check_no_shows()
+    check_payment_expiry()
     flash("No-show check completed.", "info")
     return redirect(url_for('admin_dashboard'))
 
@@ -1165,9 +1490,16 @@ def verify_booking():
                         'capacity': area_update["capacity"]
                     })
                     
+                # Award Loyalty Points on Completion
+                points_earned = int(booking['amount'] / 10)
+                mongo.db.users.update_one(
+                    {"_id": booking["user_id"]},
+                    {"$inc": {"loyalty_points": points_earned}}
+                )
+
                 mongo.db.notifications.insert_one({
                     "user_id": booking["user_id"],
-                    "message": f"👋 Exit Confirmed at {booking['area_name']}. Thank you for using ParkEase!",
+                    "message": f"👋 Exit Confirmed. You earned {points_earned} loyalty points! Thank you for using ParkEase.",
                     "timestamp": datetime.utcnow(),
                     "read": False
                 })

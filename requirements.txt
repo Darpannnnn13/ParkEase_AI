@@ -8,3 +8,4 @@ dnspython
 werkzeug
 gunicorn
 certifi
+stripe
